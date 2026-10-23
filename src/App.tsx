@@ -39,6 +39,7 @@ import { AdminPortal } from './admin/AdminPortal'
 import { RecommendationModal } from './RecommendationModal'
 import { submitBespokeQuote } from './api'
 import { LoginPage } from './auth/LoginPage'
+import { LeatherLibraryModal } from './LeatherLibraryModal'
 import { getCurrentSession, clearSession, type UserSession } from './auth/authStore'
 import {
   loadSavedDesigns,
@@ -345,6 +346,7 @@ export function App() {
     return isHashAdmin && session?.role === 'admin'
   })
   const [recommendationOpen, setRecommendationOpen] = useState(false)
+  const [leatherLibraryOpen, setLeatherLibraryOpen] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -356,8 +358,7 @@ export function App() {
           setMarketOpen(false)
         } else {
           setAdminOpen(false)
-          setAuthInitialRole('admin')
-          setAuthModalOpen(true)
+          window.location.hash = ''
         }
       } else {
         setAdminOpen(false)
@@ -751,22 +752,24 @@ export function App() {
             Live Market Prices
           </button>
           <button
-            className={adminOpen ? 'active' : ''}
-            style={{ fontWeight: 700 }}
-            onClick={() => {
-              if (userSession?.role === 'admin') {
+            type="button"
+            onClick={() => setLeatherLibraryOpen(true)}
+          >
+            📖 Hide &amp; Grain Library
+          </button>
+          {userSession?.role === 'admin' && (
+            <button
+              className={adminOpen ? 'active' : ''}
+              style={{ fontWeight: 700 }}
+              onClick={() => {
                 setAdminOpen(true)
                 setMarketOpen(false)
                 window.location.hash = '#admin'
-              } else {
-                setAuthInitialRole('admin')
-                setAuthModalOpen(true)
-                setNotice('Studio Admin credentials required to access Operations Hub.')
-              }
-            }}
-          >
-            ⚙ Atelier Admin Portal
-          </button>
+              }}
+            >
+              ⚙ Atelier Admin Portal
+            </button>
+          )}
         </nav>
 
         <div className="header-actions">
@@ -818,7 +821,7 @@ export function App() {
       </header>
 
       <main>
-        {adminOpen ? (
+        {adminOpen && userSession?.role === 'admin' ? (
           <AdminPortal
             onBackToStudio={() => {
               setAdminOpen(false)
@@ -1092,7 +1095,17 @@ export function App() {
                         <span className="section-index">01</span>
                         <h3>Choose Your Leather</h3>
                       </div>
-                      <span className="badge-verified">{leather.status}</span>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <button
+                          type="button"
+                          className="text-button"
+                          onClick={() => setLeatherLibraryOpen(true)}
+                          style={{ fontSize: '11px', color: 'var(--brown)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', background: 'none', border: 'none', cursor: 'pointer' }}
+                        >
+                          📖 Leather Library &amp; Guide ↗
+                        </button>
+                        <span className="badge-verified">{leather.status}</span>
+                      </div>
                     </div>
 
                     <div className="leather-picker">
@@ -1647,13 +1660,23 @@ export function App() {
                 THE HIDE &amp; GRAIN LIBRARY <span>02 — 03</span>
               </div>
               <div className="materials-heading">
-                <h2>
-                  Living materials<br />
-                  <em>that mature with grace.</em>
-                </h2>
-                <p>
-                  Learn how each hide grade, tanning method, and grain finish behaves over years of daily carry.
-                </p>
+                <div>
+                  <h2>
+                    Living materials<br />
+                    <em>that mature with grace.</em>
+                  </h2>
+                  <p>
+                    Learn how each hide grade, tanning method, and grain finish behaves over years of daily carry.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="tb-btn primary"
+                  onClick={() => setLeatherLibraryOpen(true)}
+                  style={{ whiteSpace: 'nowrap', padding: '10px 18px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  📖 Open Complete Leather Encyclopedia ↗
+                </button>
               </div>
 
               <div className="material-cards">
@@ -1903,10 +1926,15 @@ export function App() {
             setUserSession(session)
             setAuthModalOpen(false)
             setNotice(`Welcome back, ${session.fullName} (${session.role === 'admin' ? 'Master Artisan' : 'Bespoke Patron'}).`)
-            if (session.role === 'admin' && (authInitialRole === 'admin' || window.location.hash.includes('admin'))) {
+            if (session.role === 'admin') {
               setAdminOpen(true)
               setMarketOpen(false)
               window.location.hash = '#admin'
+            } else {
+              setAdminOpen(false)
+              if (window.location.hash.includes('admin')) {
+                window.location.hash = ''
+              }
             }
           }}
           onCancel={() => {
@@ -1929,6 +1957,18 @@ export function App() {
           setNotice('Applied recommended artisan styling.')
         }}
         targetBudget={budgetNumber > 0 ? budgetNumber : undefined}
+      />
+
+      {/* Bespoke Leather & Grain Library Encyclopedia Modal */}
+      <LeatherLibraryModal
+        isOpen={leatherLibraryOpen}
+        onClose={() => setLeatherLibraryOpen(false)}
+        currentLeatherId={configuration.leatherId}
+        onSelectLeather={(leatherId) => {
+          update('leatherId', leatherId)
+          setActiveTab('leather')
+          setNotice('Selected leather updated in 3D Studio.')
+        }}
       />
 
       {/* Notification Toast */}

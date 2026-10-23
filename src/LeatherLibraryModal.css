@@ -1,0 +1,426 @@
+/* Leather & Grain Library Encyclopedia Styling */
+.leather-library-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(14, 15, 17, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 24px;
+}
+
+.leather-library-modal {
+  background: #ffffff;
+  color: var(--ink, #1f1d1a);
+  width: 100%;
+  max-width: 980px;
+  max-height: 90vh;
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28), 0 2px 8px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(197, 179, 159, 0.35);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: modalPop 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalPop {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.leather-library-header {
+  padding: 24px 28px 18px;
+  background: linear-gradient(135deg, #1b1916 0%, #29241f 100%);
+  color: #fff;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 1px solid rgba(212, 170, 74, 0.2);
+}
+
+.leather-library-kicker {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: #d4aa4a;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+  display: block;
+}
+
+.leather-library-header h2 {
+  font: 400 26px var(--font-serif, "Newsreader", Georgia, serif);
+  margin: 0 0 6px;
+  letter-spacing: -0.01em;
+  color: #fdfaf6;
+}
+
+.leather-library-header h2 em {
+  color: #d4aa4a;
+  font-style: italic;
+}
+
+.leather-library-header p {
+  margin: 0;
+  font-size: 13px;
+  color: #b5aba0;
+  max-width: 680px;
+  line-height: 1.45;
+}
+
+.library-close-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #e5ded4;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.library-close-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  transform: scale(1.05);
+}
+
+/* Navigation Tabs */
+.library-tabs-bar {
+  display: flex;
+  gap: 6px;
+  padding: 12px 28px;
+  background: #fbf9f6;
+  border-bottom: 1px solid #ebe5df;
+  overflow-x: auto;
+}
+
+.library-tab-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 20px;
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6d665f;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.library-tab-btn:hover {
+  color: #2b2621;
+  background: #f0ece6;
+}
+
+.library-tab-btn.active {
+  background: #2b2621;
+  color: #fff;
+  border-color: #2b2621;
+}
+
+/* Modal Body Scroll Area */
+.library-content-body {
+  padding: 28px;
+  overflow-y: auto;
+  max-height: calc(90vh - 170px);
+}
+
+/* Hide Grid */
+.leather-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.leather-detail-card {
+  background: #fff;
+  border: 1px solid #e8e2dc;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.leather-detail-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
+  border-color: #c9bbae;
+}
+
+.leather-detail-card.active-selection {
+  border-color: #a65e35;
+  box-shadow: 0 0 0 2px #a65e35, 0 8px 20px rgba(166, 94, 53, 0.15);
+}
+
+/* Card Visual Banner with Procedural Textures */
+.card-texture-banner {
+  height: 140px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background-size: cover;
+  background-position: center;
+}
+
+.texture-banner-heritage-calf {
+  background: linear-gradient(135deg, rgba(138, 72, 35, 0.88), rgba(90, 42, 17, 0.94)),
+              url('/textures/brown_leather_albedo_1k.jpg');
+  background-size: cover;
+  box-shadow: inset 0 0 50px rgba(0, 0, 0, 0.4);
+}
+
+.texture-banner-pebble-grain {
+  background: radial-gradient(circle at 50% 50%, rgba(73, 52, 43, 0.92), rgba(30, 22, 18, 0.98)),
+              radial-gradient(#2b1d16 15%, transparent 16%) 0 0,
+              radial-gradient(#2b1d16 15%, transparent 16%) 8px 8px;
+  background-size: cover, 16px 16px, 16px 16px;
+  box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.5);
+}
+
+.texture-banner-saddle-hide {
+  background: linear-gradient(160deg, rgba(166, 94, 53, 0.9), rgba(60, 28, 12, 0.95)),
+              url('/textures/brown_leather_albedo_1k.jpg');
+  background-size: cover;
+  box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.6);
+}
+
+.texture-banner-saffiano {
+  background: repeating-linear-gradient(45deg, #1f2733, #1f2733 2px, #273242 2px, #273242 4px),
+              repeating-linear-gradient(-45deg, #18202b, #18202b 2px, #212d3d 2px, #212d3d 4px);
+  background-blend-mode: multiply;
+  box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.5);
+}
+
+.texture-banner-nappa {
+  background: linear-gradient(135deg, #2a2826 0%, #171615 100%);
+  box-shadow: inset 0 0 35px rgba(212, 170, 74, 0.15);
+}
+
+.banner-grade-tag {
+  align-self: flex-start;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  color: #f7eedf;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.banner-action-tag {
+  align-self: flex-end;
+  background: #ffffff;
+  color: #2b2621;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  transition: all 0.15s ease;
+}
+
+.banner-action-tag:hover {
+  background: #d4aa4a;
+  color: #fff;
+  transform: scale(1.05);
+}
+
+/* Card Body */
+.card-content {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.card-title-row {
+  margin-bottom: 8px;
+}
+
+.card-title-row h3 {
+  font: 600 16px var(--font-serif, "Newsreader", serif);
+  margin: 0 0 2px;
+  color: #2b2621;
+}
+
+.card-subtitle {
+  font-size: 11px;
+  color: #8c8275;
+  font-weight: 500;
+}
+
+.card-description {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #4f4a43;
+  margin: 0 0 14px;
+  flex: 1;
+}
+
+/* Trait Ratings Table */
+.trait-meters {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: #fbf9f6;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #f0ebe4;
+  margin-bottom: 14px;
+}
+
+.trait-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+}
+
+.trait-label {
+  color: #7a7268;
+}
+
+.trait-stars {
+  color: #a65e35;
+  font-size: 10px;
+  letter-spacing: 2px;
+}
+
+/* Spec Badges */
+.card-spec-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 10.5px;
+  color: #635c53;
+}
+
+.card-spec-tags span {
+  background: #f4efe9;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+/* Guide Sections (Tanning & Anatomy) */
+.guide-section {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.guide-block {
+  background: #fbf9f6;
+  border: 1px solid #ebe5df;
+  border-radius: 12px;
+  padding: 22px;
+}
+
+.guide-block h3 {
+  font: 600 18px var(--font-serif, Georgia, serif);
+  margin: 0 0 8px;
+  color: #2b2621;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.guide-block p {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #4a453f;
+  margin: 0 0 14px;
+}
+
+.comparison-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.comparison-box {
+  background: #ffffff;
+  border: 1px solid #e8e2dc;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.comparison-box h4 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  color: #8a4823;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.comparison-box ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: #555048;
+  line-height: 1.6;
+}
+
+/* Care Guide List */
+.care-steps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.care-step-item {
+  background: #fff;
+  border: 1px solid #e8e2dc;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.care-step-num {
+  font-size: 20px;
+  font-weight: 700;
+  color: #a65e35;
+  margin-bottom: 4px;
+}
+
+.care-step-item h4 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: #222;
+}
+
+.care-step-item p {
+  margin: 0;
+  font-size: 11.5px;
+  color: #666;
+  line-height: 1.5;
+}

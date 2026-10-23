@@ -18,14 +18,26 @@ Or run services independently:
 
 ## Role-Based Authentication & Access Control
 
+- **Strict Role Isolation**:
+  - The **Atelier Admin Portal** navigation button and operational views are **completely hidden** from regular visitors, customers, and unauthenticated sessions.
+  - Normal customer windows display only *3D Studio & Configurator*, *Live Market Prices*, and *📖 Hide & Grain Library*.
+  - When an administrator signs in via the studio access modal, the `⚙ Atelier Admin Portal` button dynamically appears in the top navigation, granting entry to the full workshop operations center.
 - **Dedicated Login Experience (`src/auth/LoginPage.tsx`)**:
   - Differentiates between **Bespoke Patron** (Customer) and **Atelier Master** (Admin / Craftsman).
   - Built-in **1-Click Instant Demo Credentials**:
-    - **Admin**: *Master Craftsman Rajesh K.* (`admin@atelier.in` / role: `admin`)
-    - **Customer**: *Ananya Sharma* (`patron@luxury.in` / role: `customer`)
+    - **Admin Profile**: *Master Craftsman Rajesh K.* (`admin@carrytote.in` / Head of Bespoke Workshop)
+    - **Multiple Customer Profiles**: *Ananya Sharma* (VIP Patron · Mumbai), *Vikramaditya Mehta* (Heritage Collector · Delhi), *Rhea Sengupta* (Architect · Bengaluru).
   - Full support for standard email/password authentication and "Continue as Guest" browsing.
-  - **Protected Admin Routes & Modals**: Unauthenticated or customer visitors attempting to access the Atelier Operations Hub (`/#admin`) are automatically prompted with a role-gated sign-in modal.
-  - Profile badge and session switcher conveniently located in the studio header.
+
+## Leather & Grain Library Encyclopedia (`src/LeatherLibraryModal.tsx`)
+
+- **Interactive Educational Knowledge Hub**:
+  - Accessible via top navigation (*📖 Hide & Grain Library*), Step 01 (*Leather Library & Guide*), and the home materials section.
+  - **The 5 Atelier Hides Deep-Dive**: Real tactile trait meters (Patina Potential, Scratch Resilience, Water Resistance), thickness (mm), rate (₹/sq.ft), temper, and 1-click *Select in 3D Studio*.
+  - **Hide Anatomy & Biological Layers**: Full-grain vs Top-grain vs Split/Bonded cross-section guide explaining tensile fiber strength and why Carry never uses synthetic bonded leather.
+  - **Tanning Alchemy**: Organic tree-bark vegetable tanning (Mimosa, Chestnut, Quebracho) vs Chromium mineral tanning and semi-aniline hybrid protective finishes.
+  - **Care & Patina Evolution**: Multi-year aging masterclass, horsehair brushing, beeswax balm conditioning, and rain moisture protocols.
+  - **Visual Procedural Swatches**: Rich, textured material banners in the home catalog cards that accurately simulate calfskin, pebble grain, saddle pull-up, saffiano cross-hatch, and silky nappa.
 
 ## Supabase Database Integration (`supabase/` & `src/supabase.ts`)
 

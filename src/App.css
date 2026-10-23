@@ -2177,6 +2177,219 @@ body {
   padding: 0;
 }
 
+/* Hide & Grain Library Section on Homepage */
+.materials-section {
+  padding: 60px 5% 80px;
+  background: linear-gradient(180deg, #fbf9f6 0%, #f4ede4 100%);
+  border-top: 1px solid var(--line, #e2d9cf);
+  border-bottom: 1px solid var(--line, #e2d9cf);
+}
+
+.section-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--brown, #8a4823);
+  text-transform: uppercase;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.section-kicker span {
+  color: var(--muted, #8c8275);
+}
+
+.materials-heading {
+  margin-bottom: 36px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.materials-heading h2 {
+  font: 400 36px var(--font-serif, "Newsreader", Georgia, serif);
+  margin: 0;
+  color: var(--ink, #1f1d1a);
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+
+.materials-heading h2 em {
+  font-style: italic;
+  color: var(--brown, #8a4823);
+}
+
+.materials-heading p {
+  margin: 0;
+  font-size: 14px;
+  color: #635b52;
+  max-width: 520px;
+  line-height: 1.5;
+}
+
+.material-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+}
+
+.material-card {
+  background: #ffffff;
+  border: 1px solid #e5ded4;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.05);
+  transition: all 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+.material-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.1);
+  border-color: #c9bbae;
+}
+
+.material-card.chosen {
+  border-color: var(--brown, #8a4823);
+  box-shadow: 0 0 0 2px var(--brown, #8a4823), 0 10px 25px rgba(138, 72, 35, 0.16);
+}
+
+/* Material Image & Procedural Textures */
+.material-image {
+  height: 160px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 14px;
+  background-size: cover;
+  background-position: center;
+}
+
+.material-image span {
+  background: rgba(14, 15, 17, 0.72);
+  backdrop-filter: blur(4px);
+  color: #f7eedf;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.material-image button {
+  background: #ffffff;
+  color: var(--ink, #1f1d1a);
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
+  transition: all 0.18s ease;
+}
+
+.material-image button:hover {
+  background: #d4aa4a;
+  color: #fff;
+  transform: scale(1.05);
+}
+
+/* Texture 0: Heritage Full-Grain Calf */
+.material-image.texture-0 {
+  background: linear-gradient(135deg, rgba(138, 72, 35, 0.85), rgba(70, 32, 12, 0.95)),
+              url('/textures/brown_leather_albedo_1k.jpg');
+  background-size: cover;
+  box-shadow: inset 0 0 50px rgba(0, 0, 0, 0.45);
+}
+
+/* Texture 1: Pebble Grain Calf */
+.material-image.texture-1 {
+  background: radial-gradient(circle at 50% 50%, rgba(73, 52, 43, 0.92), rgba(28, 20, 16, 0.98)),
+              radial-gradient(#2b1d16 16%, transparent 17%) 0 0,
+              radial-gradient(#2b1d16 16%, transparent 17%) 8px 8px;
+  background-size: cover, 16px 16px, 16px 16px;
+  box-shadow: inset 0 0 45px rgba(0, 0, 0, 0.55);
+}
+
+/* Texture 2: Saddle Hide */
+.material-image.texture-2 {
+  background: linear-gradient(160deg, rgba(166, 94, 53, 0.88), rgba(50, 22, 10, 0.96)),
+              url('/textures/brown_leather_albedo_1k.jpg');
+  background-size: cover;
+  box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.65);
+}
+
+/* Texture 3: Saffiano Cross-Grain */
+.material-image.texture-3 {
+  background: repeating-linear-gradient(45deg, #1f2733, #1f2733 2px, #273242 2px, #273242 4px),
+              repeating-linear-gradient(-45deg, #18202b, #18202b 2px, #212d3d 2px, #212d3d 4px);
+  background-blend-mode: multiply;
+  box-shadow: inset 0 0 45px rgba(0, 0, 0, 0.5);
+}
+
+/* Texture 4: Smooth Italian Nappa */
+.material-image.texture-4 {
+  background: linear-gradient(135deg, #2b2825 0%, #151413 100%);
+  box-shadow: inset 0 0 40px rgba(212, 170, 74, 0.18);
+}
+
+/* Material Card Body */
+.material-card-body {
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.material-card-body h3 {
+  font: 600 18px var(--font-serif, "Newsreader", Georgia, serif);
+  margin: 0 0 3px;
+  color: var(--ink, #1f1d1a);
+}
+
+.material-card-body h3 + span {
+  font-size: 11.5px;
+  color: var(--brown, #8a4823);
+  font-weight: 500;
+  display: block;
+  margin-bottom: 10px;
+}
+
+.material-card-body p {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #524d45;
+  margin: 0 0 16px;
+  flex: 1;
+}
+
+.material-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11px;
+  border-top: 1px solid #f0ebe4;
+  padding-top: 12px;
+}
+
+.material-meta span {
+  background: #fbf8f5;
+  border: 1px solid #ebe4dc;
+  padding: 4px 9px;
+  border-radius: 4px;
+  color: #524b42;
+  font-weight: 600;
+}
+
 /* Responsive adjustments */
 @media (max-width: 1024px) {
   .studio-layout {

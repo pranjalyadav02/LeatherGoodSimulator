@@ -138,13 +138,38 @@ This file records the user-visible project conversation in this session. Long pa
   - `npm run lint` (`oxlint`): 0 warnings, 0 errors across 23 files.
   - `npm test` (`vitest run`): 22/22 unit tests passing.
   - `npm run build` (`tsc -b && vite build`): Succeeded in 1.09s with zero TypeScript errors.
-- **GitHub Push Status:**
-  - Per the user's explicit directive ("push it on github later"), the working tree and staging are prepared and waiting for the user's instruction to push.
+## 10. Admin Portal Strict Role Isolation, Material Card Visuals & Leather Library Encyclopedia
+
+**User:** “the admin portal should only be visible to admin, it should not show admin portal in normal customer window, or user without login”
+**User:** “these are appearing blank : FULL-GRAIN Select ↗ Heritage Full-Grain Calf ... Pebble Grain Calf ... Saddle Hide ... Saffiano ... Smooth Italian Nappa”
+**User:** “also include a library about different leather types and their details”
+
+**Assistant:**
+- **Strict Role Isolation for Admin Portal:**
+  - Removed the `⚙ Atelier Admin Portal` button from the top navigation for regular visitors, customers, and unauthenticated sessions in [`src/App.tsx`](file:///c:/Users/omen/LeatherGoodSimulator/src/App.tsx).
+  - The Admin Portal navigation and operational hub are now rendered strictly when `userSession?.role === 'admin'`.
+  - Normal customer sessions display only `3D Studio & Configurator`, `Live Market Prices`, and `📖 Hide & Grain Library`.
+  - Logging in as Master Craftsman (`admin@carrytote.in`) immediately reveals the Admin Portal button and navigates to the Operations Hub.
+- **Fixed Blank Leather Cards (`src/App.css`):**
+  - Resolved the blank card issue by adding full styling for `.materials-section`, `.material-card`, `.material-image`, and the 5 procedural texture banners (`.texture-0` through `.texture-4`).
+  - Added realistic visual leather texture representations simulating Heritage Calf, Pebble Grain, Saddle Hide, Saffiano cross-hatch, and Italian Nappa with grade badges and styled `Select ↗` buttons.
+- **Built Interactive Leather & Grain Library Encyclopedia (`src/LeatherLibraryModal.tsx` & `.css`):**
+  - Accessible from the header navigation bar, Step 01 ("Hide & Color"), and the homepage materials section.
+  - Features 4 comprehensive educational tabs:
+    1. **The 5 Atelier Hides**: Complete profiles with tactile trait meters (Patina Potential, Scratch Resilience, Water Resistance), thickness, temper, rate, and 1-click *Select in 3D Studio*.
+    2. **Hide Anatomy & Biological Layers**: Microscopic layer diagram and comparison between Full-Grain (epidermis), Top-Grain (buffed), and Split/Bonded leather.
+    3. **Tanning Alchemy**: Organic tree-bark vegetable tanning (Chestnut, Mimosa, Quebracho) vs Chromium mineral tanning and semi-aniline hybrid protective finishes.
+    4. **Care & Patina Evolution**: Multi-year aging masterclass, horsehair brushing, beeswax balm conditioning, and moisture protocols.
+- **Build & Quality Validation:**
+  - `npm run build` (`tsc -b && vite build`): Succeeded in 854ms with zero errors.
+  - Browser verification confirmed textured material banners and modal interaction across all 4 tabs.
 
 ## Implementation status recorded during this conversation
 
 - Framework: React 19, Three.js, Node.js / Express, TypeScript, and Vite.
-- Authentication: Role-guarded session management (`admin` / `customer`) with 1-click instant demo switching.
+- Authentication: Role-guarded session management with Admin Portal strictly isolated from customer view.
+- Leather Education: Full-featured interactive Leather & Grain Library Encyclopedia modal.
+- Visual Textures: Procedural leather grain card banners and 3D WebGL PBR shaders.
 - Database: Supabase PostgreSQL schema with RLS and multi-tier API client fallback.
 - Cloud Deploy: Vercel SPA configuration and serverless endpoints in `/api`.
 - Local test coverage: 22 unit & integration tests passing in Vitest.
