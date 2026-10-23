@@ -5,20 +5,30 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "server": "node --experimental-strip-types server/index.ts",
+    "dev:all": "concurrently \"npm run server\" \"vite\"",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.118.0",
+    "@types/three": "^0.186.0",
+    "cors": "^2.8.6",
+    "express": "^5.3.0",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "three": "^0.186.1"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
     "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
+    "concurrently": "^10.0.6",
     "oxlint": "^1.88.0",
     "typescript": "~6.0.3",
     "vite": "^8.3.4",

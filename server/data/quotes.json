@@ -1,0 +1,74 @@
+[
+  {
+    "id": "Q-2026-0841",
+    "createdAt": "2026-10-23T09:35:59.042Z",
+    "customer": {
+      "name": "Ananya Sharma",
+      "email": "ananya.sharma@example.com",
+      "phone": "+91 98201 44512",
+      "location": "Mumbai, Maharashtra"
+    },
+    "productId": "tote",
+    "productName": "Everyday Tote Bag",
+    "leatherId": "heritage-calf",
+    "leatherName": "Heritage Full-Grain Calf",
+    "colorName": "Cognac Tan",
+    "hardware": "brass",
+    "monogram": "AS",
+    "monogramMethod": "gold_foil",
+    "dimensions": "36 × 30 × 14 cm",
+    "totalPrice": 4707,
+    "status": "In Cutting Bench",
+    "craftsman": "Master Craftsman Rajesh K.",
+    "notes": "Please ensure double edge wax burnishing on handle straps. Client requested high-shine brass fittings.",
+    "workshopSpec": "========================================================================\n    SYNERGY-NEXUS × CARRY LEATHER GOODS BESPOKE SPECIFICATION\n========================================================================\nWorkshop Status: APPROVED FOR BENCH CUTTING\nDesign Reference: SN-CARRY-7491 · Version: v1\nCustomer: Ananya Sharma <ananya.sharma@example.com>\nProduct Category: Tote bags (Everyday Tote)\nCollection: Barsati & Carry Core\n\n--- 1. FINISHED PRODUCT DIMENSIONS ---\nWidth:           36 cm (tolerance ±0.3 cm)\nHeight:          30 cm (tolerance ±0.3 cm)\nDepth / Gusset:  14 cm (tolerance ±0.3 cm)\nNet Leather Area: 8.42 sq. ft. (including 25% cutting yield)\n\n--- 2. MATERIALS & BILL OF COMPONENTS ---\nPrimary Leather:  Heritage Full-Grain Calf (Semi-aniline veg-tan)\nColor:            Cognac Tan (#9b5b2f)\nHardware Finish:  Solid Brushed Brass (Surcharge +₹350)\nStitching Thread: French Waxed Saddler Linen (Cream)\nEdge Finish:      Hand-Burnished Italian Edge Lacquer (Dark Brown)\nLining:           Sand Microfiber Canvas\nMonogram:         Hot Gold Foil Stamping \"AS\" (Front Center)\n\nTotal Indicative Production Estimate: ₹4,707"
+  },
+  {
+    "id": "Q-2026-0839",
+    "createdAt": "2026-10-22T15:35:59.048Z",
+    "customer": {
+      "name": "Vikram Malhotra",
+      "email": "vikram.m@zenithcapital.in",
+      "phone": "+91 98112 89043",
+      "location": "New Delhi, NCR"
+    },
+    "productId": "wallet",
+    "productName": "Bifold & Snap Wallet",
+    "leatherId": "saffiano",
+    "leatherName": "Saffiano Cross-Grain",
+    "colorName": "Obsidian Black",
+    "hardware": "black",
+    "monogram": "VM",
+    "monogramMethod": "blind_deboss",
+    "dimensions": "11.5 × 9.5 × 2 cm",
+    "totalPrice": 2260,
+    "status": "Ready for Dispatch",
+    "craftsman": "Artisan Suresh M.",
+    "notes": "Packaging in luxury gift box with certificate of authenticity.",
+    "workshopSpec": "========================================================================\n    SYNERGY-NEXUS × CARRY LEATHER GOODS BESPOKE SPECIFICATION\n========================================================================\nWorkshop Status: QUALITY INSPECTION PASSED\nDesign Reference: SN-CARRY-6102 · Version: v2\nCustomer: Vikram Malhotra <vikram.m@zenithcapital.in>\nProduct Category: Small Leather Goods (Bifold & Snap Wallet)\n\n--- 1. FINISHED PRODUCT DIMENSIONS ---\nWidth:           11.5 cm\nHeight:          9.5 cm\nDepth / Gusset:  2.0 cm\nNet Leather Area: 1.85 sq. ft.\n\n--- 2. MATERIALS & BILL OF COMPONENTS ---\nPrimary Leather:  Saffiano Cross-Grain\nColor:            Obsidian Black (#1c1b18)\nHardware:         Matte Black PVD Snap Clasp\nStitching Thread: Tone-on-tone Waxed Linen (Black)\nMonogram:         Deep Blind Deboss \"VM\"\n\nTotal Indicative Production Estimate: ₹2,260"
+  },
+  {
+    "id": "Q-2026-0835",
+    "createdAt": "2026-10-21T13:35:59.048Z",
+    "customer": {
+      "name": "Priyanka Sen",
+      "email": "priyanka.sen@designcollective.org",
+      "phone": "+91 97480 33219",
+      "location": "Kolkata, West Bengal"
+    },
+    "productId": "handbag",
+    "productName": "Sculptor Handbag",
+    "leatherId": "smooth-nappa",
+    "leatherName": "Smooth Italian Nappa",
+    "colorName": "Oxblood Burgundy",
+    "hardware": "silver",
+    "monogram": "PS",
+    "monogramMethod": "silver_foil",
+    "dimensions": "26 × 21 × 9 cm",
+    "totalPrice": 4890,
+    "status": "In Stitching",
+    "craftsman": "Master Craftsman Rajesh K.",
+    "notes": "Contrast stitching requested along flap contour.",
+    "workshopSpec": "Product: Sculptor Handbag | Nappa Leather (Oxblood) | Antique Silver Clasp"
+  }
+]

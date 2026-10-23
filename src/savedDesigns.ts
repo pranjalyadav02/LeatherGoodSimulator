@@ -18,8 +18,8 @@ function isConfiguration(value: unknown): value is Configuration {
     !PRODUCTS.some((product) => product.id === config.productId) ||
     !LEATHERS.some((leather) => leather.id === config.leatherId) ||
     typeof config.colorId !== 'string' ||
-    !['brass', 'silver', 'black'].includes(config.hardware ?? '') ||
-    !['embossed', 'engraved'].includes(config.monogramMethod ?? '') ||
+    !['brass', 'silver', 'black', 'rose', 'gunmetal'].includes(config.hardware ?? '') ||
+    !['embossed', 'engraved', 'gold_foil', 'silver_foil', 'rose_foil', 'blind_deboss'].includes(config.monogramMethod ?? '') ||
     !['widthCm', 'heightCm', 'depthCm'].every((key) => typeof config[key as keyof Configuration] === 'number') ||
     typeof config.monogram !== 'string' ||
     typeof config.removableStrap !== 'boolean' ||

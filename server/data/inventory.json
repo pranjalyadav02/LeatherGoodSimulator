@@ -1,0 +1,107 @@
+[
+  {
+    "id": "heritage-calf",
+    "category": "Leather Hides",
+    "name": "Heritage Full-Grain Calf",
+    "stockSqFt": 480,
+    "minThresholdSqFt": 200,
+    "ratePerSqFt": 260,
+    "supplier": "Bavaria Hide Co. / Chennai Tanneries",
+    "status": "In Stock",
+    "thicknessMm": 1.6
+  },
+  {
+    "id": "pebble-grain",
+    "category": "Leather Hides",
+    "name": "Pebble Grain Calf",
+    "stockSqFt": 310,
+    "minThresholdSqFt": 150,
+    "ratePerSqFt": 210,
+    "supplier": "Ranipet Leather Works",
+    "status": "In Stock",
+    "thicknessMm": 1.8
+  },
+  {
+    "id": "saddle-hide",
+    "category": "Leather Hides",
+    "name": "Saddle Hide (Heavy Veg-Tan)",
+    "stockSqFt": 140,
+    "minThresholdSqFt": 180,
+    "ratePerSqFt": 280,
+    "supplier": "Kanpur Saddlery Tannery",
+    "status": "Low Stock",
+    "thicknessMm": 2.8
+  },
+  {
+    "id": "saffiano",
+    "category": "Leather Hides",
+    "name": "Saffiano Cross-Grain",
+    "stockSqFt": 520,
+    "minThresholdSqFt": 200,
+    "ratePerSqFt": 235,
+    "supplier": "Arzignano Finishing Mills",
+    "status": "In Stock",
+    "thicknessMm": 1.5
+  },
+  {
+    "id": "smooth-nappa",
+    "category": "Leather Hides",
+    "name": "Smooth Italian Nappa",
+    "stockSqFt": 95,
+    "minThresholdSqFt": 120,
+    "ratePerSqFt": 250,
+    "supplier": "Tuscany Leather Consortium",
+    "status": "Low Stock",
+    "thicknessMm": 1.4
+  },
+  {
+    "id": "hw-brass",
+    "category": "Hardware Kits",
+    "name": "Solid Brushed Brass Fittings Kit",
+    "stockUnits": 145,
+    "minThresholdUnits": 50,
+    "costPerUnit": 350,
+    "supplier": "Aligarh Metal Guild",
+    "status": "In Stock"
+  },
+  {
+    "id": "hw-silver",
+    "category": "Hardware Kits",
+    "name": "Antique Silver Finish Kit",
+    "stockUnits": 88,
+    "minThresholdUnits": 40,
+    "costPerUnit": 280,
+    "supplier": "Moradabad Foundry",
+    "status": "In Stock"
+  },
+  {
+    "id": "hw-black",
+    "category": "Hardware Kits",
+    "name": "Matte Black PVD Hardware Kit",
+    "stockUnits": 110,
+    "minThresholdUnits": 40,
+    "costPerUnit": 320,
+    "supplier": "Apex Electroplating",
+    "status": "In Stock"
+  },
+  {
+    "id": "thread-linen",
+    "category": "Craft Supplies",
+    "name": "Waxed French Saddler Linen Thread (Spools)",
+    "stockUnits": 42,
+    "minThresholdUnits": 15,
+    "costPerUnit": 180,
+    "supplier": "Fil Au Chinois / Local Guild",
+    "status": "In Stock"
+  },
+  {
+    "id": "edge-lacquer",
+    "category": "Craft Supplies",
+    "name": "Italian Edge Burnishing Lacquer (Liters)",
+    "stockUnits": 18,
+    "minThresholdUnits": 10,
+    "costPerUnit": 420,
+    "supplier": "Fenice Edge Chemicals",
+    "status": "In Stock"
+  }
+]

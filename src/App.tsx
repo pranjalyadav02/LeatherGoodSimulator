@@ -1,17 +1,45 @@
-import { useMemo, useRef, useState } from 'react'
-import { DEFAULT_CONFIGURATION, LEATHERS, PRODUCTS, configurationForProduct, leatherById, productById } from './catalog'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  calculatePrice,
+  DEFAULT_CONFIGURATION,
+  EDGE_LIST,
+  FOIL_LIST,
+  HARDWARE_LIST,
+  LEATHERS,
+  LINING_LIST,
+  PRODUCTS,
+  THREAD_LIST,
+  configurationForProduct,
+  leatherById,
+  productById,
+} from './catalog'
+import {
+  calculateStudioCost,
   configurationSummary,
   decodeConfiguration,
   decodeDesignSnapshot,
   encodeDesignSnapshot,
+  findBudgetAlternatives,
   parseDesignRequest,
   recommendAlternatives,
   validateConfiguration,
 } from './engine'
-import type { Configuration, ParsedDesign, ProductId } from './types'
+import type {
+  Configuration,
+  HardwareId,
+  MonogramFont,
+  MonogramMethod,
+  MonogramPlacement,
+  MonogramSize,
+  ParsedDesign,
+  ProductId,
+} from './types'
 import MarketDashboard from './MarketDashboard'
+import Product3DViewer from './Product3DViewer'
+import { AdminPortal } from './admin/AdminPortal'
+import { RecommendationModal } from './RecommendationModal'
+import { submitBespokeQuote } from './api'
+import { LoginPage } from './auth/LoginPage'
+import { getCurrentSession, clearSession, type UserSession } from './auth/authStore'
 import {
   loadSavedDesigns,
   isSavedSnapshot,
@@ -21,101 +49,258 @@ import {
 } from './savedDesigns'
 import './App.css'
 
+const TODAY_ISO = new Date().toISOString().slice(0, 10)
 type AssistantMessage = { role: 'assistant' | 'customer'; text: string }
+type CustomTab = 'leather' | 'hardware' | 'size' | 'monogram' | 'review'
 
-function ProductPreview({ config }: { config: Configuration }) {
+const ARTISAN_PRESETS = [
+  {
+    id: 'classic',
+    name: 'Classic Heritage',
+    badge: '★ Best Seller',
+    leatherId: 'heritage-calf',
+    colorId: 'saddle',
+    accentColorId: 'espresso',
+    hardware: 'brass' as HardwareId,
+    threadColorId: 'cream',
+    edgeColorId: 'match',
+  },
+  {
+    id: 'noir',
+    name: 'Espresso Noir',
+    badge: 'Sleek Minimal',
+    leatherId: 'pebble-grain',
+    colorId: 'espresso',
+    accentColorId: 'black',
+    hardware: 'black' as HardwareId,
+    threadColorId: 'black',
+    edgeColorId: 'black',
+  },
+  {
+    id: 'oxblood',
+    name: 'Royal Oxblood',
+    badge: 'Luxury Evening',
+    leatherId: 'saffiano',
+    colorId: 'oxblood',
+    accentColorId: 'saddle',
+    hardware: 'brass' as HardwareId,
+    threadColorId: 'oxblood',
+    edgeColorId: 'oxblood',
+  },
+  {
+    id: 'forest',
+    name: 'Forest & Nickel',
+    badge: 'Artisan Atelier',
+    leatherId: 'heritage-calf',
+    colorId: 'olive',
+    accentColorId: 'natural',
+    hardware: 'silver' as HardwareId,
+    threadColorId: 'cream',
+    edgeColorId: 'natural',
+  },
+]
+
+const SIZE_PRESETS: Record<
+  ProductId,
+  {
+    compact: { w: number; h: number; d: number; label: string }
+    standard: { w: number; h: number; d: number; label: string }
+    roomy: { w: number; h: number; d: number; label: string }
+  }
+> = {
+  tote: {
+    compact: { w: 30, h: 26, d: 10, label: 'Compact City' },
+    standard: { w: 36, h: 30, d: 14, label: 'Daily Carryall' },
+    roomy: { w: 44, h: 36, d: 18, label: 'Roomy Weekender' },
+  },
+  handbag: {
+    compact: { w: 22, h: 18, d: 7, label: 'Mini Sling' },
+    standard: { w: 26, h: 21, d: 9, label: 'Classic Shoulder' },
+    roomy: { w: 32, h: 26, d: 13, label: 'Executive Day' },
+  },
+  wallet: {
+    compact: { w: 10, h: 8.5, d: 1.5, label: 'Slim Pocket' },
+    standard: { w: 11.5, h: 9.5, d: 2, label: 'Standard Bifold' },
+    roomy: { w: 13, h: 10.5, d: 2.8, label: 'Travel & Cash' },
+  },
+  cardholder: {
+    compact: { w: 8.5, h: 6.5, d: 0.6, label: 'Ultra Minimal' },
+    standard: { w: 10, h: 7.5, d: 0.8, label: 'Essential Daily' },
+    roomy: { w: 11.5, h: 8.5, d: 1.2, label: 'Expanded 8-Card' },
+  },
+  sleeve: {
+    compact: { w: 28, h: 20, d: 2, label: '11" Tablet / Passport' },
+    standard: { w: 34, h: 24, d: 2.5, label: '13"–14" Laptop' },
+    roomy: { w: 38, h: 28, d: 3.5, label: '15"–16" Pro Laptop' },
+  },
+  toiletry: {
+    compact: { w: 22, h: 12, d: 10, label: 'Overnight Kit' },
+    standard: { w: 25, h: 14, d: 12, label: 'Standard Dopp' },
+    roomy: { w: 30, h: 18, d: 15, label: 'Extended Travel' },
+  },
+  sunglass: {
+    compact: { w: 15, h: 7, d: 3.5, label: 'Slim Optical' },
+    standard: { w: 17, h: 8, d: 4.5, label: 'Standard Eyewear' },
+    roomy: { w: 19, h: 9.5, d: 5.5, label: 'Oversized Shades' },
+  },
+}
+
+function Product2DPreview({ config }: { config: Configuration }) {
   const product = productById(config.productId)
   const leather = leatherById(config.leatherId)
   const color = leather.colors.find((item) => item.id === config.colorId)?.hex ?? '#a65e35'
   const isTote = config.productId === 'tote'
   const isSleeve = config.productId === 'sleeve'
+  const isHandbag = config.productId === 'handbag'
+  const isWallet = config.productId === 'wallet'
+  const isToiletry = config.productId === 'toiletry'
+  const isSunglass = config.productId === 'sunglass'
+
   const leatherPath = isTote
     ? 'M105 136 Q108 124 124 122 L356 122 Q373 124 378 140 L356 344 Q353 359 337 360 L146 360 Q129 359 126 344 Z'
-    : isSleeve
-      ? 'M110 124 Q110 116 120 116 L362 116 Q372 116 372 126 L360 330 Q359 341 348 341 L124 341 Q113 341 112 330 Z'
-      : 'M134 155 Q134 143 147 143 L335 143 Q348 143 348 156 L342 309 Q341 320 329 320 L151 320 Q139 320 139 308 Z'
-  const hardwareColor = config.hardware === 'brass' ? '#c59a55' : config.hardware === 'silver' ? '#c3c4c0' : '#373b3a'
+    : isHandbag
+      ? 'M120 148 Q124 136 142 136 L338 136 Q356 136 360 148 L354 326 Q350 348 328 350 L152 350 Q130 348 126 326 Z'
+      : isSleeve
+        ? 'M110 124 Q110 116 120 116 L362 116 Q372 116 372 126 L360 330 Q359 341 348 341 L124 341 Q113 341 112 330 Z'
+        : isWallet
+          ? 'M125 142 Q125 134 136 134 L344 134 Q355 134 355 142 L350 318 Q349 328 338 328 L142 328 Q131 328 130 318 Z'
+          : isToiletry
+            ? 'M116 150 Q120 138 134 138 L346 138 Q360 138 364 150 L360 310 Q356 324 342 324 L138 324 Q124 324 120 310 Z'
+            : isSunglass
+              ? 'M130 162 Q134 148 152 148 L328 148 Q346 148 350 162 L344 298 Q340 314 324 314 L156 314 Q140 314 136 298 Z'
+              : 'M134 155 Q134 143 147 143 L335 143 Q348 143 348 156 L342 309 Q341 320 329 320 L151 320 Q139 320 139 308 Z'
+
+  const hwMatch = HARDWARE_LIST.find((h) => h.id === config.hardware)
+  const hardwareColor = hwMatch?.hex ?? '#d4aa4a'
 
   return (
-    <svg className="product-art" viewBox="0 0 480 420" role="img" aria-label={`${product.name} preview in ${color}`}>
+    <svg className="product-art" viewBox="0 0 480 420" role="img" aria-label={`${product.name} 2D blueprint in ${color}`}>
       <defs>
-        <linearGradient id="leather" x1="0" x2="1" y1="0" y2="1">
+        <linearGradient id="leather2d" x1="0" x2="1" y1="0" y2="1">
           <stop offset="0%" stopColor={color} />
-          <stop offset="55%" stopColor={color} />
-          <stop offset="100%" stopColor="#221711" stopOpacity=".3" />
+          <stop offset="60%" stopColor={color} />
+          <stop offset="100%" stopColor="#221711" stopOpacity=".35" />
         </linearGradient>
-        <linearGradient id="sideShade" x1="0" x2="1">
-          <stop offset="0%" stopColor="#1b1713" stopOpacity=".27" />
-          <stop offset="45%" stopColor="#fff" stopOpacity=".05" />
-          <stop offset="100%" stopColor="#120e0b" stopOpacity=".24" />
+        <linearGradient id="sideShade2d" x1="0" x2="1">
+          <stop offset="0%" stopColor="#1b1713" stopOpacity=".28" />
+          <stop offset="50%" stopColor="#fff" stopOpacity=".06" />
+          <stop offset="100%" stopColor="#120e0b" stopOpacity=".26" />
         </linearGradient>
-        <pattern id="leatherGrain" patternUnits="userSpaceOnUse" width="170" height="170">
-          <image href="/textures/brown_leather_albedo_1k.jpg" width="170" height="170" preserveAspectRatio="xMidYMid slice" />
-        </pattern>
-        <filter id="softShadow" x="-30%" y="-30%" width="160%" height="180%">
-          <feGaussianBlur stdDeviation="11" />
+        <filter id="softShadow2d" x="-30%" y="-30%" width="160%" height="180%">
+          <feGaussianBlur stdDeviation="10" />
         </filter>
       </defs>
-      <ellipse cx="244" cy="371" rx="146" ry="17" fill="#56443a" opacity=".16" filter="url(#softShadow)" />
+
+      <ellipse cx="240" cy="372" rx="145" ry="16" fill="#4a3b30" opacity=".18" filter="url(#softShadow2d)" />
+
       {isTote && (
         <>
-          <path d="M157 141 C147 50 184 41 219 119 M316 141 C326 50 289 41 254 119" fill="none" stroke="#553622" strokeWidth="20" strokeLinecap="round" />
+          <path d="M157 141 C147 50 184 41 219 119 M316 141 C326 50 289 41 254 119" fill="none" stroke="#482d1c" strokeWidth="20" strokeLinecap="round" />
           <path d="M157 141 C147 50 184 41 219 119 M316 141 C326 50 289 41 254 119" fill="none" stroke={color} strokeWidth="13" strokeLinecap="round" />
         </>
       )}
-      <path d={leatherPath} fill="url(#leather)" stroke="#34251c" strokeWidth="2" />
-      <path d={leatherPath} fill="url(#sideShade)" opacity=".8" />
-      <path d={leatherPath} fill="url(#leatherGrain)" opacity=".3" style={{ mixBlendMode: 'multiply' }} />
-      {isTote && <path d="M121 143 Q239 164 361 143" fill="none" stroke="#38271d" strokeWidth="4" />}
-      {config.paddedLining && isSleeve && <path d="M130 139 L351 139 L345 317 L128 317 Z" fill="none" stroke="#e6d8c1" strokeWidth="7" opacity=".76" />}
-      {config.pocketCount > 0 && (
+
+      {isHandbag && (
         <>
-          <path d={isTote ? 'M174 237 Q174 230 183 230 L321 230 Q329 230 329 238 L325 314 L177 314 Z' : 'M164 226 L317 226 L314 290 L161 290 Z'} fill={color} opacity=".62" stroke="#38271d" strokeWidth="1.4" />
-          <path d={isTote ? 'M174 237 Q251 245 329 238' : 'M164 226 Q241 233 317 226'} fill="none" stroke="#dcc09a" strokeOpacity=".62" />
-          {config.pocketCount > 1 && <path d={isTote ? 'M252 239 L250 314' : 'M241 229 L239 290'} stroke="#39291e" strokeOpacity=".46" />}
+          <path d="M175 140 C175 65 305 65 305 140" fill="none" stroke="#482d1c" strokeWidth="16" strokeLinecap="round" />
+          <path d="M175 140 C175 65 305 65 305 140" fill="none" stroke={color} strokeWidth="10" strokeLinecap="round" />
         </>
       )}
-      <path d={leatherPath} fill="none" stroke="#efd1a6" strokeOpacity=".65" strokeWidth="1.4" strokeDasharray="2 5" />
-      {!isTote && (
-        <path d={isSleeve ? 'M110 163 Q240 178 369 163' : 'M136 203 Q240 214 346 203'} fill="none" stroke="#3b291c" strokeWidth="3" />
-      )}
-      {isTote && config.removableStrap && (
+
+      <path d={leatherPath} fill="url(#leather2d)" stroke="#2b1f17" strokeWidth="2.2" />
+      <path d={leatherPath} fill="url(#sideShade2d)" opacity=".8" />
+
+      {isHandbag && (
         <>
-          <path d="M121 171 C49 229 62 342 132 348 M362 171 C429 229 417 342 352 348" fill="none" stroke="#5a4030" strokeWidth="9" strokeLinecap="round" />
-          <circle cx="125" cy="171" r="8" fill={hardwareColor} />
-          <circle cx="359" cy="171" r="8" fill={hardwareColor} />
+          <path d="M125 152 Q240 215 355 152 L350 220 Q240 258 130 220 Z" fill={color} stroke="#2b1f17" strokeWidth="1.8" />
+          <rect x="232" y="222" width="16" height="24" rx="4" fill={hardwareColor} />
+          <circle cx="240" cy="234" r="4" fill="#222" />
         </>
       )}
-      {isTote && <><circle cx="153" cy="151" r="7" fill={hardwareColor} /><circle cx="329" cy="151" r="7" fill={hardwareColor} /></>}
-      {isSleeve && <rect x="342" y="148" width="13" height="16" rx="4" fill={hardwareColor} />}
-      {isTote && config.monogram && <text x="251" y="210" textAnchor="middle" className="preview-monogram">{config.monogram}</text>}
-      {isSleeve && config.monogram && <text x="241" y="196" textAnchor="middle" className="preview-monogram">{config.monogram}</text>}
-      {!isTote && !isSleeve && (
+
+      {isWallet && (
         <>
-          <path d="M149 225 L332 225 M149 258 L332 258 M196 225 L196 258 M284 225 L284 258" fill="none" stroke="#e9ceaa" strokeOpacity=".48" strokeWidth="2" />
-          <text x="241" y="195" textAnchor="middle" className="preview-monogram">{config.monogram || '✦'}</text>
+          <path d="M130 216 L350 216" stroke="#2b1f17" strokeWidth="2" strokeDasharray="3 4" />
+          <rect x="330" y="200" width="22" height="32" rx="6" fill={color} stroke="#2b1f17" strokeWidth="1.5" />
+          <circle cx="341" cy="216" r="5" fill={hardwareColor} />
         </>
       )}
+
+      {isToiletry && (
+        <>
+          <path d="M124 148 L356 148" stroke={hardwareColor} strokeWidth="6" strokeLinecap="round" />
+          <rect x="340" y="142" width="12" height="18" rx="2" fill={hardwareColor} />
+        </>
+      )}
+
+      <path d={leatherPath} fill="none" stroke="#f2dbbe" strokeOpacity=".7" strokeWidth="1.4" strokeDasharray="3 5" />
+
+      {config.monogram && (
+        <text
+          x={config.monogramPlacement === 'corner' ? '310' : '240'}
+          y={isTote ? '220' : isHandbag ? '275' : isWallet ? '260' : '230'}
+          textAnchor="middle"
+          className="preview-monogram"
+          style={{
+            fontFamily:
+              config.monogramFont === 'script'
+                ? 'Pinyon Script, cursive'
+                : config.monogramFont === 'sans'
+                  ? 'Instrument Sans, sans-serif'
+                  : 'Newsreader, serif',
+            fontSize: config.monogramSize === 'L' ? '28px' : config.monogramSize === 'S' ? '18px' : '22px',
+            fill: config.monogramMethod.includes('gold')
+              ? '#d4aa4a'
+              : config.monogramMethod.includes('silver')
+                ? '#c5c8cc'
+                : config.monogramMethod.includes('rose')
+                  ? '#cb9285'
+                  : '#222',
+            letterSpacing: '0.12em',
+          }}
+        >
+          {config.monogram}
+        </text>
+      )}
+
       <g className="dimension-mark">
         <path d="M94 137 L94 354 M87 137 L101 137 M87 354 L101 354" />
-        <text x="72" y="250" transform="rotate(-90 72 250)">{config.heightCm} cm</text>
+        <text x="72" y="250" transform="rotate(-90 72 250)">
+          {config.heightCm} cm
+        </text>
         <path d="M130 383 L354 383 M130 377 L130 389 M354 377 L354 389" />
-        <text x="242" y="403" textAnchor="middle">{config.widthCm} cm wide</text>
+        <text x="242" y="403" textAnchor="middle">
+          {config.widthCm} cm wide · {config.depthCm} cm deep
+        </text>
       </g>
     </svg>
   )
 }
 
-function App() {
+function formatMoney(amount: number): string {
+  return '₹' + Math.round(amount).toLocaleString('en-IN')
+}
+
+export function App() {
   const initialHashValue = window.location.hash.startsWith('#config=') ? window.location.hash.slice(8) : ''
   const initialSnapshot = initialHashValue ? decodeDesignSnapshot(initialHashValue) : null
+
   const [configuration, setConfiguration] = useState<Configuration>(() => {
     return initialSnapshot?.configuration ?? DEFAULT_CONFIGURATION
   })
-  const [designIdentity, setDesignIdentity] = useState({
-    id: initialSnapshot?.designId ?? null,
-    version: initialSnapshot?.designVersion ?? 0,
-  })
+
+  const [designIdentity, setDesignIdentity] = useState(() => ({
+    id: initialSnapshot?.designId ?? 'SN-CARRY-7491',
+    version: initialSnapshot?.designVersion ?? 1,
+  }))
+
+  const [activeTab, setActiveTab] = useState<CustomTab>('leather')
+  const [history, setHistory] = useState<Configuration[]>([])
+  const [altOriginal, setAltOriginal] = useState<Configuration | null>(null)
+  const [targetBudget, setTargetBudget] = useState('4500')
+  const [previewMode, setPreviewMode] = useState<'3d' | '2d'>('3d')
+  const [designCodeInput, setDesignCodeInput] = useState('')
+
   const [savedDesignState, setSavedDesignState] = useState<{ designs: SavedDesign[]; error: string }>(() => {
     try {
       return { designs: loadSavedDesigns(), error: '' }
@@ -127,63 +312,306 @@ function App() {
     }
   })
   const savedDesigns = savedDesignState.designs
+
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [messages, setMessages] = useState<AssistantMessage[]>([
-    { role: 'assistant', text: 'Welcome to the studio. Tell me what you have in mind and I’ll turn the details I recognize into an editable starting point.' },
+    {
+      role: 'assistant',
+      text: 'Welcome to SynnergyNexus & Carry Bespoke Studio. Describe what you’d like to create, adjust, or target by budget!',
+    },
   ])
   const [messageInput, setMessageInput] = useState('')
   const [proposal, setProposal] = useState<ParsedDesign | null>(null)
   const [notice, setNotice] = useState(() => {
     const hashValue = window.location.hash.startsWith('#config=') ? window.location.hash.slice(8) : ''
     return hashValue && !decodeConfiguration(hashValue)
-      ? 'This shared design link is invalid or out of date. A fresh sample design has been loaded.'
+      ? 'This shared design link was out of date. A fresh studio model has been loaded.'
       : ''
   })
+
   const [showQuoteForm, setShowQuoteForm] = useState(false)
   const [quotePrepared, setQuotePrepared] = useState(false)
   const [referenceImage, setReferenceImage] = useState('')
   const [referenceName, setReferenceName] = useState('')
   const [referenceError, setReferenceError] = useState('')
-  const [activeSection, setActiveSection] = useState<'design' | 'materials' | 'details'>('design')
   const [marketOpen, setMarketOpen] = useState(false)
   const [savedDesignsOpen, setSavedDesignsOpen] = useState(false)
-  const [targetBudget, setTargetBudget] = useState('')
-  const [budgetPriority, setBudgetPriority] = useState('best-balance')
+  const [userSession, setUserSession] = useState<UserSession | null>(() => getCurrentSession())
+  const [authModalOpen, setAuthModalOpen] = useState(false)
+  const [authInitialRole, setAuthInitialRole] = useState<'admin' | 'customer'>('customer')
+  const [adminOpen, setAdminOpen] = useState(() => {
+    const isHashAdmin = typeof window !== 'undefined' && window.location.hash.includes('admin')
+    const session = getCurrentSession()
+    return isHashAdmin && session?.role === 'admin'
+  })
+  const [recommendationOpen, setRecommendationOpen] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
+  useEffect(() => {
+    const handleHash = () => {
+      if (window.location.hash.includes('admin')) {
+        const session = getCurrentSession()
+        if (session && session.role === 'admin') {
+          setAdminOpen(true)
+          setMarketOpen(false)
+        } else {
+          setAdminOpen(false)
+          setAuthInitialRole('admin')
+          setAuthModalOpen(true)
+        }
+      } else {
+        setAdminOpen(false)
+      }
+    }
+    window.addEventListener('hashchange', handleHash)
+    return () => window.removeEventListener('hashchange', handleHash)
+  }, [])
+
+  // Validation & Costing
   const issues = useMemo(() => validateConfiguration(configuration), [configuration])
   const errors = issues.filter((issue) => issue.severity === 'error')
-  const warnings = issues.filter((issue) => issue.severity === 'warning')
-  const price = useMemo(() => calculatePrice(configuration), [configuration])
+  const studioCost = useMemo(() => calculateStudioCost(configuration), [configuration])
+
+  const budgetNumber = Number(targetBudget) || 0
+  const budgetAlternatives = useMemo(() => {
+    if (budgetNumber > 0 && studioCost.total > budgetNumber) {
+      return findBudgetAlternatives(configuration, budgetNumber)
+    }
+    return []
+  }, [configuration, budgetNumber, studioCost.total])
+
   const recommendations = useMemo(
-    () => errors.length ? recommendAlternatives(configuration) : [],
+    () => (errors.length ? recommendAlternatives(configuration) : []),
     [configuration, errors.length],
   )
+
   const product = productById(configuration.productId)
   const leather = leatherById(configuration.leatherId)
   const selectedColor = leather.colors.find((color) => color.id === configuration.colorId) ?? leather.colors[0]
   const isCurrentSavedVersion = isSavedSnapshot(savedDesigns, designIdentity.id, designIdentity.version, configuration)
-  const displayedVersion = isCurrentSavedVersion ? designIdentity.version : 0
+  const displayedVersion = isCurrentSavedVersion ? designIdentity.version : designIdentity.version
 
-  const update = <K extends keyof Configuration>(key: K, value: Configuration[K]) =>
-    setConfiguration((previous) => ({ ...previous, [key]: value }))
+  const pushHistory = (current: Configuration) => {
+    setHistory((prev) => [...prev.slice(-25), current])
+  }
 
-  const switchProduct = (productId: ProductId) =>
-    setConfiguration((previous) => configurationForProduct(productId, previous))
+  const update = <K extends keyof Configuration>(key: K, value: Configuration[K]) => {
+    pushHistory(configuration)
+    setAltOriginal(null)
+    setConfiguration((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const switchProduct = (productId: ProductId) => {
+    pushHistory(configuration)
+    setAltOriginal(null)
+    setConfiguration((prev) => configurationForProduct(productId, prev))
+    setNotice(`Switched to ${productById(productId).name}. Proportions set to model defaults.`)
+  }
+
+  const applyArtisanPreset = (preset: (typeof ARTISAN_PRESETS)[number]) => {
+    pushHistory(configuration)
+    setConfiguration((prev) => ({
+      ...prev,
+      leatherId: preset.leatherId,
+      colorId: preset.colorId,
+      accentColorId: preset.accentColorId,
+      hardware: preset.hardware,
+      threadColorId: preset.threadColorId,
+      edgeColorId: preset.edgeColorId,
+    }))
+    setNotice(`Applied ${preset.name} artisan look.`)
+  }
+
+  const applySizePreset = (presetKey: 'compact' | 'standard' | 'roomy') => {
+    const presets = SIZE_PRESETS[configuration.productId]
+    if (!presets) return
+    const p = presets[presetKey]
+    pushHistory(configuration)
+    setConfiguration((prev) => ({
+      ...prev,
+      widthCm: p.w,
+      heightCm: p.h,
+      depthCm: p.d,
+    }))
+    setNotice(`Sized to ${p.label} (${p.w} × ${p.h} × ${p.d} cm).`)
+  }
+
+  const undo = () => {
+    if (history.length === 0) {
+      setNotice('No previous action to undo.')
+      return
+    }
+    const previous = history[history.length - 1]
+    setHistory((prev) => prev.slice(0, -1))
+    setConfiguration(previous)
+    setNotice('Previous configuration restored.')
+  }
+
+  const resetToDefault = () => {
+    pushHistory(configuration)
+    setConfiguration(configurationForProduct(configuration.productId, DEFAULT_CONFIGURATION))
+    setNotice('Reset to product standard defaults.')
+  }
+
+  const shuffleDesign = () => {
+    pushHistory(configuration)
+    const randomLeather = LEATHERS[Math.floor(Math.random() * LEATHERS.length)]
+    const randomColor = randomLeather.colors[Math.floor(Math.random() * randomLeather.colors.length)]
+    const randomHw = HARDWARE_LIST[Math.floor(Math.random() * HARDWARE_LIST.length)]
+    const randomThread = THREAD_LIST[Math.floor(Math.random() * THREAD_LIST.length)]
+    const randomEdge = EDGE_LIST[Math.floor(Math.random() * EDGE_LIST.length)]
+    const randomFoil = FOIL_LIST[Math.floor(Math.random() * FOIL_LIST.length)]
+
+    setConfiguration((prev) => ({
+      ...prev,
+      leatherId: randomLeather.id,
+      colorId: randomColor.id,
+      hardware: randomHw.id,
+      threadColorId: randomThread.id,
+      edgeColorId: randomEdge.id,
+      monogramMethod: randomFoil.id,
+    }))
+    setNotice('Generated an artisan palette combination.')
+  }
+
+  const previewAlternative = (alt: Configuration) => {
+    setAltOriginal(configuration)
+    setConfiguration(alt)
+    setNotice('Previewing budget alternative. Click “Restore original” to revert anytime.')
+  }
+
+  const restoreOriginalDesign = () => {
+    if (!altOriginal) return
+    setConfiguration(altOriginal)
+    setAltOriginal(null)
+    setNotice('Original design restored.')
+  }
+
+  // Workshop Build Sheet text
+  const workshopSpecText = useMemo(() => {
+    const hwMatch = HARDWARE_LIST.find((h) => h.id === configuration.hardware)
+    const foilMatch = FOIL_LIST.find((f) => f.id === configuration.monogramMethod)
+    const threadMatch = THREAD_LIST.find((t) => t.id === configuration.threadColorId)
+    const edgeMatch = EDGE_LIST.find((e) => e.id === configuration.edgeColorId)
+    const liningMatch = LINING_LIST.find((l) => l.id === configuration.liningColorId)
+
+    const lines = [
+      '========================================================================',
+      '      SYNERGY-NEXUS × CARRY LEATHER GOODS BESPOKE SPECIFICATION        ',
+      '========================================================================',
+      `Workshop Status: ${errors.length ? 'NEEDS REVISION' : 'APPROVED FOR BENCH CUTTING'}`,
+      `Design Reference: ${designIdentity.id} · Version: v${displayedVersion}`,
+      `Date Issued:      ${TODAY_ISO}`,
+      `Product Category: ${product.category} (${product.name})`,
+      `Collection:       ${product.carryCollection ?? 'Carry Core Bespoke'}`,
+      '',
+      '--- 1. FINISHED PRODUCT DIMENSIONS ---',
+      `Width:            ${configuration.widthCm} cm (tolerance ±0.3 cm)`,
+      `Height:           ${configuration.heightCm} cm (tolerance ±0.3 cm)`,
+      `Depth / Gusset:   ${configuration.depthCm} cm (tolerance ±0.3 cm)`,
+      `Net Leather Area: ${studioCost.leatherAreaSqFt} sq. ft. (including 25% cutting yield)`,
+      '',
+      '--- 2. MATERIALS & BILL OF COMPONENTS ---',
+      `Primary Leather:  ${leather.name}`,
+      `Grade & Tanning:  ${leather.grade} · ${leather.finish}`,
+      `Thickness:        ${leather.thickness} mm (tolerance ±0.1 mm)`,
+      `Color Code:       ${selectedColor.name} (${selectedColor.hex})`,
+      `Lining:           ${liningMatch?.name ?? 'Sand Microfiber Canvas'}`,
+      `Hardware:         ${hwMatch?.name ?? 'Brushed Gold / Brass'}`,
+      `Thread / Stitch:  ${threadMatch?.name ?? 'Contrast Linen Cream'}`,
+      `Edge Paint:       ${edgeMatch?.name ?? 'Matched Darker Edge'}`,
+      '',
+      '--- 3. BESPOKE PERSONALIZATION & MONOGRAM ---',
+      configuration.monogram
+        ? `Initials:         ${configuration.monogram}\nMethod / Foil:    ${foilMatch?.name ?? configuration.monogramMethod}\nTypography:       ${configuration.monogramFont ?? 'serif'}\nPlacement:        ${configuration.monogramPlacement === 'corner' ? 'Lower right corner' : 'Front centered'}\nScale:            ${configuration.monogramSize ?? 'M'}`
+        : 'Initials:         None specified',
+      '',
+      '--- 4. STRUCTURAL & FUNCTIONAL DETAILS ---',
+      `Removable Strap:  ${configuration.removableStrap ? 'Yes (adjustable with snap hooks)' : 'No'}`,
+      `Padded Lining:    ${configuration.paddedLining ? 'Yes (high-density protective foam)' : 'Standard'}`,
+      `Interior Pockets: ${configuration.pocketCount} pocket(s)`,
+      configuration.customRequest ? `Artisan Notes:    "${configuration.customRequest}"` : 'Artisan Notes:    None',
+      '',
+      '--- 5. COMMERCIAL ESTIMATE & TIMELINE ---',
+      `Leather Hide:     ${formatMoney(studioCost.leatherCost)} (@ ₹${studioCost.ratePerSqFtUsed}/sq.ft)`,
+      `Hardware Kit:     ${formatMoney(studioCost.hardwareCost)}`,
+      `Bench Labor:      ${formatMoney(studioCost.laborCost)}`,
+      `Lining & Trim:    ${formatMoney(studioCost.liningCost + studioCost.monogramCost)}`,
+      `Estimated Total:  ${formatMoney(studioCost.total)} (indicative manufacturing benchmark)`,
+      `Estimated Bench:  ${studioCost.estimatedDays} working days to dispatch`,
+      '',
+      '--- 6. PRE-PRODUCTION CHECKLIST ---',
+      '[ ] Physical color swatch approved by client',
+      '[ ] Leather thickness gauged with micrometer',
+      '[ ] Hardware fasteners and tensile strength verified',
+      '[ ] Monogram brass stamping die aligned and heat tested',
+      '========================================================================',
+    ]
+    return lines.join('\n')
+  }, [configuration, product, leather, selectedColor, designIdentity, displayedVersion, studioCost, errors])
+
+  const copyWorkshopSpec = async () => {
+    try {
+      await navigator.clipboard.writeText(workshopSpecText)
+      setNotice('Workshop specification copied to clipboard.')
+    } catch {
+      setNotice('Could not copy automatically. Select text in the specification box.')
+    }
+  }
+
+  const downloadSpecFile = () => {
+    const blob = new Blob([workshopSpecText], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `SPEC-${designIdentity.id}-v${displayedVersion}.txt`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    setNotice('Downloaded workshop specification file.')
+  }
+
+  const exportDesignCode = () => {
+    const payload = {
+      id: designIdentity.id,
+      v: displayedVersion,
+      config: configuration,
+    }
+    const code = btoa(unescape(encodeURIComponent(JSON.stringify(payload))))
+    setDesignCodeInput(code)
+    navigator.clipboard.writeText(code).catch(() => {})
+    setNotice('Design code generated and copied! Paste it anytime to reopen this exact 3D design.')
+  }
+
+  const importDesignCode = () => {
+    try {
+      const parsed = JSON.parse(decodeURIComponent(escape(atob(designCodeInput.trim()))))
+      if (!parsed?.config || !productById(parsed.config.productId)) {
+        throw new Error('Invalid code format.')
+      }
+      pushHistory(configuration)
+      setConfiguration(parsed.config)
+      if (parsed.id) setDesignIdentity({ id: parsed.id, version: parsed.v ?? 1 })
+      setNotice(`Loaded design ${parsed.id ?? ''} version v${parsed.v ?? 1}.`)
+    } catch {
+      setNotice('That design code isn’t valid. Please paste the full base64 code string.')
+    }
+  }
 
   const handleAssistantSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const text = messageInput.trim()
     if (!text) return
     const result = parseDesignRequest(text, configuration)
-    setMessages((previous) => [
-      ...previous,
+    setMessages((prev) => [
+      ...prev,
       { role: 'customer', text },
       {
         role: 'assistant',
         text: result.recognized.length
-          ? `Here’s what I could map to the sample catalog: ${result.recognized.join(' · ')}. I’ve kept this as a proposal so you can review it before anything changes.`
-          : 'I couldn’t confidently map that to the sample catalog yet. I’ve left your design unchanged.',
+          ? `I mapped your request to: ${result.recognized.join(' · ')}. I’ve prepared an editable proposal for you to review and apply to the 3D model.`
+          : 'I couldn’t confidently recognize specific leather or product parameters yet. Tell me what product, color, or detail you would like!',
       },
     ])
     setProposal(result.recognized.length ? result : null)
@@ -192,9 +620,10 @@ function App() {
 
   const applyProposal = () => {
     if (!proposal) return
+    pushHistory(configuration)
     setConfiguration(configurationForProduct(proposal.configuration.productId, proposal.configuration))
     setProposal(null)
-    setNotice('Your reviewed choices are now in the configurator.')
+    setNotice('Your reviewed choices have been applied to the 3D studio.')
   }
 
   const handleReference = (file?: File) => {
@@ -227,9 +656,9 @@ function App() {
     window.history.replaceState(null, '', `#config=${value}`)
     try {
       await navigator.clipboard.writeText(url)
-      setNotice('Share link copied. Monogram text and custom notes are intentionally excluded.')
+      setNotice('Share link copied to clipboard. Monogram and personal notes are excluded.')
     } catch {
-      setNotice(`Share link ready (copy it from the address bar). Personal details are excluded.`)
+      setNotice('Share link ready in the address bar.')
     }
   }
 
@@ -238,7 +667,7 @@ function App() {
       const result = saveDesignVersion(savedDesigns, configuration, designIdentity.id ?? undefined)
       setSavedDesignState({ designs: result.designs, error: '' })
       setDesignIdentity({ id: result.saved.id, version: result.saved.version })
-      setNotice(`Saved ${result.saved.id} · version ${result.saved.version} in this browser. Use Share design for a portable versioned link.`)
+      setNotice(`Saved ${result.saved.id} · version ${result.saved.version} in this browser.`)
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not save this design.')
     }
@@ -250,317 +679,1269 @@ function App() {
       setNotice('This saved design version is invalid or unavailable.')
       return
     }
+    pushHistory(configuration)
     setConfiguration(restored)
     setDesignIdentity({ id: saved.id, version: saved.version })
     setSavedDesignsOpen(false)
     setNotice(`Restored ${saved.id} · version ${saved.version}.`)
   }
 
-  const submitQuoteRequest = (event: React.FormEvent<HTMLFormElement>) => {
+  const submitQuoteRequest = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    const form = event.currentTarget
+    const formData = new FormData(form)
+    const clientName = (formData.get('name') as string) || 'Bespoke Client'
+    const clientEmail = (formData.get('email') as string) || 'client@carrytote.in'
+    const clientNote = (formData.get('note') as string) || ''
+
+    try {
+      await submitBespokeQuote({
+        customer: { name: clientName, email: clientEmail },
+        productId: configuration.productId,
+        productName: product.name,
+        leatherId: configuration.leatherId,
+        leatherName: leather.name,
+        colorName: selectedColor.name,
+        hardware: configuration.hardware,
+        monogram: configuration.monogram,
+        monogramMethod: configuration.monogramMethod,
+        dimensions: `${configuration.widthCm} × ${configuration.heightCm} × ${configuration.depthCm} cm`,
+        totalPrice: studioCost.total,
+        notes: clientNote,
+        workshopSpec: workshopSpecText,
+        configuration,
+      })
+      setNotice('Bespoke quote queued in Carry Workshop Bench system.')
+    } catch {
+      // fallback handled gracefully
+    }
     setQuotePrepared(true)
   }
 
-  const goTo = (section: typeof activeSection) => {
-    setActiveSection(section)
-    document.getElementById(section)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
-
-  const fieldValue = (key: 'widthCm' | 'heightCm' | 'depthCm') => configuration[key]
-
   return (
     <div className="app-shell">
+      {/* Top Studio Header */}
       <header className="site-header">
-        <a className="brand" href="#" aria-label="Atelier N°07 home">
-          <span className="brand-mark">A<span>07</span></span>
-          <span className="brand-name">ATELIER <b>N°07</b></span>
+        <a className="brand" href="#" aria-label="Atelier N°07 × SynnergyNexus">
+          <span className="brand-mark">SN<span>07</span></span>
+          <span className="brand-name">
+            SYNERGY<b>NEXUS</b> <small>× CARRY BESPOKE STUDIO</small>
+          </span>
         </a>
+
         <nav className="main-nav" aria-label="Main navigation">
-          <button className={!marketOpen && activeSection === 'design' ? 'active' : ''} onClick={() => { setMarketOpen(false); goTo('design') }}>The studio</button>
-          <button className={!marketOpen && activeSection === 'materials' ? 'active' : ''} onClick={() => { setMarketOpen(false); goTo('materials') }}>Materials</button>
-          <button className={marketOpen ? 'active' : ''} onClick={() => setMarketOpen(true)}>Market prices</button>
+          <button
+            className={!marketOpen && !adminOpen ? 'active' : ''}
+            onClick={() => {
+              setMarketOpen(false)
+              setAdminOpen(false)
+              window.location.hash = ''
+            }}
+          >
+            3D Studio &amp; Configurator
+          </button>
+          <button
+            className={marketOpen && !adminOpen ? 'active' : ''}
+            onClick={() => {
+              setMarketOpen(true)
+              setAdminOpen(false)
+              window.location.hash = ''
+            }}
+          >
+            Live Market Prices
+          </button>
+          <button
+            className={adminOpen ? 'active' : ''}
+            style={{ fontWeight: 700 }}
+            onClick={() => {
+              if (userSession?.role === 'admin') {
+                setAdminOpen(true)
+                setMarketOpen(false)
+                window.location.hash = '#admin'
+              } else {
+                setAuthInitialRole('admin')
+                setAuthModalOpen(true)
+                setNotice('Studio Admin credentials required to access Operations Hub.')
+              }
+            }}
+          >
+            ⚙ Atelier Admin Portal
+          </button>
         </nav>
+
         <div className="header-actions">
-          <span className="availability"><i /> Made to order</span>
-          <button className="icon-button bag-button" onClick={saveCurrentDesign} aria-label="Save current design">♡</button>
-          <button className="saved-designs-button" onClick={() => setSavedDesignsOpen(true)}>Saved designs{savedDesigns.length > 0 && <span>{savedDesigns.length}</span>}</button>
+          {userSession ? (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: 'var(--cream)', padding: '4px 10px', borderRadius: '20px', border: '1px solid var(--line)' }}>
+              <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ink)' }}>
+                {userSession.role === 'admin' ? '⚙️' : '👤'} {userSession.fullName}
+                <small style={{ marginLeft: '4px', color: userSession.role === 'admin' ? 'var(--brown)' : 'var(--muted)', fontWeight: 700 }}>
+                  ({userSession.role.toUpperCase()})
+                </small>
+              </span>
+              <button
+                type="button"
+                className="text-button"
+                style={{ fontSize: '10.5px', color: 'var(--muted)' }}
+                onClick={() => {
+                  clearSession()
+                  setUserSession(null)
+                  setAdminOpen(false)
+                  window.location.hash = ''
+                  setNotice('Signed out of atelier session.')
+                }}
+              >
+                Sign Out
+              </button>
+            </div>
+          ) : (
+            <button
+              className="action-pill-button"
+              onClick={() => {
+                setAuthInitialRole('customer')
+                setAuthModalOpen(true)
+              }}
+            >
+              🔑 Sign In / Access
+            </button>
+          )}
+
+          <span className="availability">
+            <i /> Handcrafted in India
+          </span>
+          <button className="saved-designs-button" onClick={() => setSavedDesignsOpen(true)} title="Saved Version History">
+            Saved versions {savedDesigns.length > 0 && <span>{savedDesigns.length}</span>}
+          </button>
+          <button className="action-pill-button" onClick={saveCurrentDesign} title="Save version snapshot">
+            ♡ Save v{displayedVersion}
+          </button>
         </div>
       </header>
 
       <main>
-        <section className="intro">
-          <div className="eyebrow"><span>THE BESPOKE STUDIO</span><span className="eyebrow-line" /> No. 01 — made yours</div>
-          <div className="intro-copy">
-            <div>
-              <h1>Made for the<br /><em>way you move.</em></h1>
-              <p>Choose your silhouette, feel your materials, and make a piece that’s unmistakably yours.</p>
-            </div>
-            <div className="intro-side-note"><span>01 / 03</span><span>DESIGN YOUR PIECE<br />IN YOUR OWN TIME</span></div>
-          </div>
-        </section>
-
-        {marketOpen ? (
-          <MarketDashboard
-            onBack={() => setMarketOpen(false)}
-            selectedMaterial={leather.name}
+        {adminOpen ? (
+          <AdminPortal
+            onBackToStudio={() => {
+              setAdminOpen(false)
+              window.location.hash = ''
+            }}
           />
+        ) : marketOpen ? (
+          <MarketDashboard onBack={() => setMarketOpen(false)} selectedMaterial={leather.name} />
         ) : (
-        <>
-        <div className="studio-layout" id="design">
-          <section className="preview-column" aria-label="Product preview">
-            <div className="preview-topline">
-              <div><span className="live-dot" /> LIVE PREVIEW</div>
-              <div className="preview-controls"><button aria-label="Zoom out" onClick={() => setNotice('Use the dimensions controls to refine your design.')}>−</button><span>1:1</span><button aria-label="Zoom in" onClick={() => setNotice('Preview is illustrative, not dimensionally exact.')}>+</button></div>
-            </div>
-            <div className="preview-stage">
-              <span className="stage-label">YOUR PIECE, IN PROGRESS</span>
-              <div className="art-wrap"><ProductPreview config={configuration} /></div>
-              <span className="stage-caption">A DIGITAL STUDY · HANDCRAFTED TO ORDER</span>
-              <button className="assistant-orb" onClick={() => setAssistantOpen(true)} aria-label="Open design assistant">✳</button>
-            </div>
-            <div className="preview-footer">
-              <div><span className="small-label">CURRENT DESIGN</span><strong>{product.name}</strong></div>
-              <button className="text-button" onClick={shareConfiguration}>↗ &nbsp;Share design</button>
-            </div>
-            <div className="preview-note"><span>ⓘ</span> Preview is an illustrative SVG study; final construction is confirmed by an artisan.</div>
-          </section>
+          <>
+            {/* Intro Hero Strip */}
+            <section className="intro">
+              <div className="eyebrow">
+                <span>SIMULATION-BASED BESPOKE ATELIER</span>
+                <span className="eyebrow-line" />
+                Carry Leather Goods · Real-Time 3D Configurator
+              </div>
+              <div className="intro-copy">
+                <div>
+                  <h1>
+                    Crafted for the<br />
+                    <em>way you move.</em>
+                  </h1>
+                  <p>
+                    Select a silhouette, customize natural full-grain hides, hardware, and foil monograms in 3D with live manufacturing costing.
+                  </p>
+                </div>
+                <div className="quick-toolbar">
+                  <button className="tb-btn" onClick={() => setRecommendationOpen(true)} title="AI Style & Harmony Recommender">
+                    ✦ Smart Recommender
+                  </button>
+                  <button className="tb-btn" onClick={undo} title="Undo last change">↶ Undo</button>
+                  <button className="tb-btn" onClick={shuffleDesign} title="Inspire with random combination">✦ Shuffle</button>
+                  <button className="tb-btn" onClick={resetToDefault} title="Reset to defaults">↺ Reset</button>
+                  <button className="tb-btn primary" onClick={shareConfiguration} title="Share design link">↗ Share link</button>
+                </div>
+              </div>
+            </section>
 
-          <section className="configuration-column" aria-label="Product configuration">
-            <div className="step-heading">
-              <div className="step-number">01</div>
-              <div><span className="small-label">LET’S BEGIN</span><h2>Make it yours</h2></div>
-              <button className="assistant-link" onClick={() => setAssistantOpen(true)}>✳ <span>Ask the studio</span></button>
-            </div>
-
-            <div className="product-choices">
+            {/* Carry Product Family Selection Strip */}
+            <div className="product-families-bar" role="tablist" aria-label="Product Families">
               {PRODUCTS.map((item) => (
-                <button key={item.id} className={`product-choice ${configuration.productId === item.id ? 'selected' : ''}`} onClick={() => switchProduct(item.id)}>
-                  <span className={`product-thumb ${item.id}`} aria-hidden="true"><i /></span>
-                  <span><b>{item.name}</b><small>{item.category}</small></span>
-                  <span className="choice-check">{configuration.productId === item.id ? '✓' : ''}</span>
+                <button
+                  key={item.id}
+                  role="tab"
+                  aria-selected={configuration.productId === item.id}
+                  className={`family-tab ${configuration.productId === item.id ? 'active' : ''}`}
+                  onClick={() => switchProduct(item.id)}
+                >
+                  <span className="family-name">{item.name}</span>
+                  <span className="family-category">{item.category}</span>
+                  <span className="family-badge">{item.indicativePriceRange ?? `₹${item.basePrice}`}</span>
                 </button>
               ))}
             </div>
 
-            <div className="control-section">
-              <div className="section-title"><div><span className="section-index">01</span><h3>Choose your leather</h3></div><button className="text-link" onClick={() => goTo('materials')}>Learn about leather ↗</button></div>
-              <div className="leather-picker">
-                {LEATHERS.map((item) => (
-                  <button key={item.id} className={`leather-option ${configuration.leatherId === item.id ? 'selected' : ''}`} onClick={() => update('leatherId', item.id)}>
-                    <span className={`leather-sample sample-${item.id}`} />
-                    <span className="leather-option-copy"><b>{item.name}</b><small>{item.grade} · {item.thickness.toFixed(1)} mm</small></span>
-                    <span className="radio-dot">{configuration.leatherId === item.id && <i />}</span>
-                  </button>
-                ))}
-              </div>
-              <div className="color-row">
-                <div><span className="field-label">SHADE</span><span className="color-name">{selectedColor.name}</span></div>
-                <div className="swatches" role="radiogroup" aria-label="Leather color">
-                  {leather.colors.map((color) => (
-                    <button key={color.id} className={`swatch ${configuration.colorId === color.id ? 'selected' : ''}`} style={{ '--swatch': color.hex } as React.CSSProperties} onClick={() => update('colorId', color.id)} aria-label={color.name} aria-pressed={configuration.colorId === color.id} />
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="control-section dimensions-section">
-              <div className="section-title"><div><span className="section-index">02</span><h3>Find your fit</h3></div><span className="unit-note">CENTIMETRES</span></div>
-              <div className="dimension-fields">
-                {([
-                  ['widthCm', 'Width', product.dimensions.width],
-                  ['heightCm', 'Height', product.dimensions.height],
-                  ['depthCm', 'Depth', product.dimensions.depth],
-                ] as const).map(([key, label, range]) => (
-                  <label className="dimension-field" key={key}>
-                    <span>{label}</span>
-                    <div><input type="number" min={range[0]} max={range[1]} value={fieldValue(key)} onChange={(event) => update(key, Number(event.target.value))} /><span>cm</span></div>
-                    <small>{range[0]}–{range[1]} cm</small>
-                  </label>
-                ))}
-              </div>
-              <p className="helper-text">The range shown is a sample workshop limit and should be confirmed for your order.</p>
-            </div>
-
-            <div className="control-section">
-              <div className="section-title"><div><span className="section-index">03</span><h3>The finishing touches</h3></div></div>
-              <label className="select-row"><span><b>Hardware finish</b><small>Solid, considered details</small></span>
-                <select value={configuration.hardware} onChange={(event) => update('hardware', event.target.value as Configuration['hardware'])}>
-                  <option value="brass">Antique brass</option><option value="silver">Brushed silver</option><option value="black">Matte black</option>
-                </select>
-              </label>
-              <label className="select-row"><span><b>Monogram</b><small>Up to 3 characters · {configuration.monogramMethod}</small></span>
-                <div className="monogram-controls"><input className="monogram-input" maxLength={8} value={configuration.monogram} onChange={(event) => update('monogram', event.target.value.toUpperCase())} placeholder="ADD INITIALS" aria-label="Monogram text" /><select aria-label="Monogram method" value={configuration.monogramMethod} onChange={(event) => update('monogramMethod', event.target.value as Configuration['monogramMethod'])}><option value="embossed">Embossed</option><option value="engraved">Engraved</option></select></div>
-              </label>
-              {product.supportsStrap && <label className="toggle-row"><span><b>Removable shoulder strap</b><small>Adjustable, detachable carry</small></span><input type="checkbox" checked={configuration.removableStrap} onChange={(event) => update('removableStrap', event.target.checked)} /></label>}
-              {product.supportsPadding && <label className="toggle-row"><span><b>Padded lining</b><small>A soft layer of everyday protection</small></span><input type="checkbox" checked={configuration.paddedLining} onChange={(event) => update('paddedLining', event.target.checked)} /></label>}
-              <label className="select-row pocket-row"><span><b>Interior pockets</b><small>Useful little places for the small things</small></span><select value={configuration.pocketCount} onChange={(event) => update('pocketCount', Number(event.target.value))}><option value={0}>None</option><option value={1}>1 pocket</option><option value={2}>2 pockets</option><option value={3}>3 pockets</option><option value={4}>4 pockets</option><option value={5}>5 pockets</option></select></label>
-              <label className="custom-request-field"><span className="field-label">A NOTE FOR THE ARTISAN <span>OPTIONAL</span></span><textarea rows={2} maxLength={240} value={configuration.customRequest} onChange={(event) => update('customRequest', event.target.value)} placeholder="A detail you’d like us to consider..." /></label>
-            </div>
-          </section>
-
-          <aside className="summary-column" aria-label="Design summary">
-            <div className="summary-card">
-              <span className="small-label">YOUR ATELIER EDIT</span>
-              <h2>A piece of<br /><em>your own.</em></h2>
-              <p className="summary-intro">Made thoughtfully, one at a time. Your choices come together in a considered piece, built around you.</p>
-              <div className="summary-rule" />
-              <ul className="summary-list">
-                <li><span>Silhouette</span><b>{product.name}</b></li>
-                <li><span>Leather</span><b>{leather.name}</b></li>
-                <li><span>Shade</span><b><i className="mini-swatch" style={{ background: selectedColor.hex }} />{selectedColor.name}</b></li>
-                <li><span>Hardware</span><b>{configuration.hardware === 'brass' ? 'Antique brass' : configuration.hardware === 'silver' ? 'Brushed silver' : 'Matte black'}</b></li>
-                <li><span>Size</span><b>{configuration.widthCm} × {configuration.heightCm} × {configuration.depthCm} cm</b></li>
-                {configuration.monogram && <li><span>Personalization</span><b>{configuration.monogramMethod} · {configuration.monogram}</b></li>}
-              </ul>
-              <div className={`validation-status ${errors.length ? 'invalid' : 'valid'}`}>
-                <span>{errors.length ? '!' : '✓'}</span>
-                <div><b>{errors.length ? 'Needs a little adjustment' : warnings.length ? 'Ready for artisan review' : 'Within sample design rules'}</b><small>{errors.length ? `${errors.length} item${errors.length === 1 ? '' : 's'} to review` : warnings.length ? 'Custom notes need a human review' : 'Illustrative validation only'}</small></div>
-              </div>
-              {errors.length > 0 && (
-                <div className="issue-list" role="alert">
-                  {errors.map((issue) => <p key={issue.code}>{issue.message}</p>)}
-                  {recommendations.map((item, index) => (
-                    <button className="recommendation" key={`${item.title}-${index}`} onClick={() => setConfiguration(item.configuration)}>
-                      <span>TRY THIS INSTEAD</span><b>{item.title}</b><small>{item.changes.join(' · ')}</small>
+            {/* Main Balanced 2-Column Studio Layout */}
+            <div className="studio-layout" id="design">
+              {/* Left Column: Sticky 3D Stage & Quick Action Strip */}
+              <section className="preview-column" aria-label="Interactive Product Preview">
+                <div className="preview-topline">
+                  <div className="mode-toggle-group">
+                    <button
+                      className={`mode-btn ${previewMode === '3d' ? 'active' : ''}`}
+                      onClick={() => setPreviewMode('3d')}
+                    >
+                      ❖ 3D Studio
                     </button>
-                  ))}
-                </div>
-              )}
-              <div className="estimate-block">
-                <div><span className="small-label">SUPPLIER-BASED PRICE</span><strong>{errors.length ? '—' : 'Quote required'}</strong></div>
-                <span className="estimate-info" title={price.reason}>ⓘ</span>
-              </div>
-              <details className="budget-tool">
-                <summary><span>♧</span> Design within my budget</summary>
-                <div className="budget-content">
-                  <label>Target budget (INR)<input type="number" min="1" step="1" value={targetBudget} onChange={(event) => setTargetBudget(event.target.value)} placeholder="Enter your budget" /></label>
-                  <label>What matters most?<select value={budgetPriority} onChange={(event) => setBudgetPriority(event.target.value)}><option value="lowest">Lowest achievable price</option><option value="best-balance">Best balance of price and durability</option><option value="premium">Premium materials within budget</option><option value="preserve">Preserve my current design</option></select></label>
-                  <div className="budget-result" role="status">
-                    <b>{targetBudget && Number(targetBudget) > 0 ? 'Budget fit cannot be assessed yet.' : 'Start with a budget that feels right.'}</b>
-                    <p>No verified procurement cost is mapped to {leather.name}, and the workshop’s full costing model is unavailable. I can’t responsibly rank alternatives, confirm affordability, or claim a saving.</p>
-                    <small>Priority selected: {budgetPriority === 'best-balance' ? 'Best balance of price and durability' : budgetPriority === 'lowest' ? 'Lowest achievable price' : budgetPriority === 'premium' ? 'Premium materials within budget' : 'Preserve my current design'}.</small>
-                    <button type="button" onClick={() => setMarketOpen(true)}>Review supplier observations →</button>
+                    <button
+                      className={`mode-btn ${previewMode === '2d' ? 'active' : ''}`}
+                      onClick={() => setPreviewMode('2d')}
+                    >
+                      ◧ 2D Blueprint
+                    </button>
+                  </div>
+                  <div className="preview-spec-badge">
+                    {product.name} · {configuration.widthCm}×{configuration.heightCm}×{configuration.depthCm} cm
                   </div>
                 </div>
-              </details>
-              <p className="estimate-disclaimer">{errors.length ? <>Resolve invalid sample-rule conflicts first.<br />No price for this combination.</> : <>No current verified supplier price is mapped to this material.<br />Market averages are not procurement costs.</>}</p>
-              <button className="market-link-button" onClick={() => setMarketOpen(true)}>View observed supplier prices <span>↗</span></button>
-              <button className="primary-button" disabled={errors.length > 0} onClick={() => { setShowQuoteForm(true); setQuotePrepared(false) }}>Request an artisan quote <span>↗</span></button>
-              <button className="secondary-button" onClick={() => window.print()}>Print design brief <span>⌁</span></button>
-              <button className="save-button" onClick={saveCurrentDesign}>♡ &nbsp;Save this design</button>
-              <button className="save-button" onClick={shareConfiguration}>↗ &nbsp;Share this version</button>
-              <details className="specification-card">
-                <summary>Review your design specification <span>⌄</span></summary>
-                <div>
-                  <small>{designIdentity.id ? `${designIdentity.id} · ${displayedVersion ? `VERSION ${displayedVersion}` : 'UNSAVED DRAFT'}` : 'UNSAVED DESIGN · SAVE TO ASSIGN AN ID'}</small>
-                  <ul>{configurationSummary(configuration).map((item) => <li key={item}>{item}</li>)}</ul>
-                  <p>Price: unavailable — no verified mapped procurement cost. Lead time: to be confirmed by the workshop. Sample rule validation is not workshop approval.</p>
-                  {configuration.customRequest && <p>Customer instruction: {configuration.customRequest}</p>}
+
+                <div className="preview-stage-container">
+                  {previewMode === '3d' ? (
+                    <Product3DViewer config={configuration} />
+                  ) : (
+                    <div className="art-wrap">
+                      <Product2DPreview config={configuration} />
+                    </div>
+                  )}
+
+                  <button
+                    className="assistant-orb"
+                    onClick={() => setAssistantOpen(true)}
+                    aria-label="Open AI Leather Design Assistant"
+                    title="Ask AI Design Assistant"
+                  >
+                    ✳
+                  </button>
                 </div>
-              </details>
-              <div className="leadtime-note"><span>◷</span><span><b>Made with intention</b><small>Timing confirmed by an artisan after review.</small></span></div>
+
+                {/* Instant Color Switcher directly beneath 3D Stage */}
+                <div className="stage-quick-swatches-card">
+                  <div className="quick-swatches-head">
+                    <span className="small-label">QUICK SHADE SWITCH</span>
+                    <span className="quick-shade-name">{selectedColor.name}</span>
+                  </div>
+                  <div className="swatches" role="radiogroup" aria-label="Quick Leather Shade">
+                    {leather.colors.map((color) => (
+                      <button
+                        key={`quick-${color.id}`}
+                        className={`swatch ${configuration.colorId === color.id ? 'selected' : ''}`}
+                        style={{ '--swatch': color.hex } as React.CSSProperties}
+                        onClick={() => update('colorId', color.id)}
+                        aria-label={color.name}
+                        title={color.name}
+                      >
+                        {configuration.colorId === color.id && <span className="check">✓</span>}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Live Manufacturing Price & Budget Card */}
+                <div className="live-pricing-card">
+                  <div className="price-primary-row">
+                    <div>
+                      <span className="small-label">LIVE MANUFACTURING ESTIMATE</span>
+                      <div className="price-display">
+                        <span className="currency">₹</span>
+                        <span className="amount">{studioCost.total.toLocaleString('en-IN')}</span>
+                      </div>
+                      <span className="leadtime-pill">⏱ ~{studioCost.estimatedDays} working days craft time</span>
+                    </div>
+
+                    <div className="budget-input-wrapper">
+                      <label htmlFor="target-budget-input">Target Budget (₹)</label>
+                      <input
+                        id="target-budget-input"
+                        type="number"
+                        min="500"
+                        step="100"
+                        value={targetBudget}
+                        onChange={(e) => setTargetBudget(e.target.value)}
+                        placeholder="e.g. 4000"
+                      />
+                    </div>
+                  </div>
+
+                  {budgetNumber > 0 && (
+                    <div className="budget-evaluation">
+                      {studioCost.total <= budgetNumber ? (
+                        <div className="budget-status-tag ok">
+                          <span>✓ Within budget</span> by {formatMoney(budgetNumber - studioCost.total)}
+                        </div>
+                      ) : (
+                        <div className="budget-status-tag over">
+                          <span>⚠ Over target budget</span> by {formatMoney(studioCost.total - budgetNumber)}
+                        </div>
+                      )}
+
+                      {budgetAlternatives.length > 0 && (
+                        <div className="budget-alternative-box">
+                          <div className="alt-head">
+                            <strong>Suggested Alternative: {formatMoney(budgetAlternatives[0].price)}</strong>
+                            <span>Saves {formatMoney(studioCost.total - budgetAlternatives[0].price)}</span>
+                          </div>
+                          <ul className="alt-changes">
+                            {budgetAlternatives[0].changes.map((change, idx) => (
+                              <li key={idx}>{change}</li>
+                            ))}
+                          </ul>
+                          <div className="alt-actions">
+                            <button
+                              type="button"
+                              className="alt-apply-btn"
+                              onClick={() => previewAlternative(budgetAlternatives[0].configuration)}
+                            >
+                              Preview Alternative
+                            </button>
+                            {altOriginal && (
+                              <button
+                                type="button"
+                                className="alt-restore-btn"
+                                onClick={restoreOriginalDesign}
+                              >
+                                Restore Original ({formatMoney(calculateStudioCost(altOriginal).total)})
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              {/* Right Column: Intuitive Tabbed Customization Studio */}
+              <section className="configuration-column" aria-label="Bespoke Controls">
+                {/* Curated One-Click Artisan Presets Strip */}
+                <div className="artisan-presets-strip">
+                  <span className="presets-label">CURATED STYLES:</span>
+                  <div className="presets-list">
+                    {ARTISAN_PRESETS.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        className="preset-chip"
+                        onClick={() => applyArtisanPreset(p)}
+                        title={`Apply ${p.name}`}
+                      >
+                        <span className="preset-name">{p.name}</span>
+                        <span className="preset-badge">{p.badge}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Step Tabs Navigation */}
+                <div className="step-tabs-bar" role="tablist">
+                  <button
+                    role="tab"
+                    aria-selected={activeTab === 'leather'}
+                    className={`step-tab ${activeTab === 'leather' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('leather')}
+                  >
+                    <span className="tab-num">01</span>
+                    <span className="tab-title">Hide &amp; Color</span>
+                  </button>
+                  <button
+                    role="tab"
+                    aria-selected={activeTab === 'hardware'}
+                    className={`step-tab ${activeTab === 'hardware' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('hardware')}
+                  >
+                    <span className="tab-num">02</span>
+                    <span className="tab-title">Hardware &amp; Craft</span>
+                  </button>
+                  <button
+                    role="tab"
+                    aria-selected={activeTab === 'size'}
+                    className={`step-tab ${activeTab === 'size' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('size')}
+                  >
+                    <span className="tab-num">03</span>
+                    <span className="tab-title">Size &amp; Fit</span>
+                  </button>
+                  <button
+                    role="tab"
+                    aria-selected={activeTab === 'monogram'}
+                    className={`step-tab ${activeTab === 'monogram' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('monogram')}
+                  >
+                    <span className="tab-num">04</span>
+                    <span className="tab-title">Monogram</span>
+                  </button>
+                  <button
+                    role="tab"
+                    aria-selected={activeTab === 'review'}
+                    className={`step-tab ${activeTab === 'review' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('review')}
+                  >
+                    <span className="tab-num">05</span>
+                    <span className="tab-title">Spec &amp; Quote</span>
+                  </button>
+                </div>
+
+                {/* Tab 1: Leather & Color */}
+                {activeTab === 'leather' && (
+                  <div className="control-section tab-panel">
+                    <div className="section-title">
+                      <div>
+                        <span className="section-index">01</span>
+                        <h3>Choose Your Leather</h3>
+                      </div>
+                      <span className="badge-verified">{leather.status}</span>
+                    </div>
+
+                    <div className="leather-picker">
+                      {LEATHERS.map((item) => (
+                        <button
+                          key={item.id}
+                          className={`leather-option ${configuration.leatherId === item.id ? 'selected' : ''}`}
+                          onClick={() => update('leatherId', item.id)}
+                        >
+                          <span className={`leather-sample sample-${item.id}`} />
+                          <span className="leather-option-copy">
+                            <b>{item.name}</b>
+                            <small>{item.grade} · {item.thickness} mm · ₹{item.ratePerSqFt}/sq.ft</small>
+                          </span>
+                          <span className="radio-dot">{configuration.leatherId === item.id && <i />}</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {leather.availableFinishes && leather.availableFinishes.length > 1 && (
+                      <div className="sub-control-row">
+                        <span className="field-label">SURFACE TEXTURE FINISH</span>
+                        <div className="pills-row">
+                          {leather.availableFinishes.map((f) => (
+                            <button
+                              key={f}
+                              className={`pill-btn ${configuration.leatherFinish === f ? 'selected' : ''}`}
+                              onClick={() => update('leatherFinish', f)}
+                            >
+                              {f.toUpperCase()}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="color-row">
+                      <div>
+                        <span className="field-label">PRIMARY BODY COLOR</span>
+                        <span className="color-name">{selectedColor.name}</span>
+                      </div>
+                      <div className="swatches" role="radiogroup" aria-label="Body Leather color">
+                        {leather.colors.map((color) => (
+                          <button
+                            key={color.id}
+                            className={`swatch ${configuration.colorId === color.id ? 'selected' : ''}`}
+                            style={{ '--swatch': color.hex } as React.CSSProperties}
+                            onClick={() => update('colorId', color.id)}
+                            aria-label={color.name}
+                            title={color.name}
+                          >
+                            {configuration.colorId === color.id && <span className="check">✓</span>}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="color-row">
+                      <div>
+                        <span className="field-label">{product.accentName?.toUpperCase() ?? 'ACCENT LEATHER TRIM'}</span>
+                        <span className="color-name">
+                          {leather.colors.find((c) => c.id === configuration.accentColorId)?.name ?? 'Contrast trim'}
+                        </span>
+                      </div>
+                      <div className="swatches" role="radiogroup" aria-label="Accent leather color">
+                        {leather.colors.map((color) => (
+                          <button
+                            key={`accent-${color.id}`}
+                            className={`swatch ${configuration.accentColorId === color.id ? 'selected' : ''}`}
+                            style={{ '--swatch': color.hex } as React.CSSProperties}
+                            onClick={() => update('accentColorId', color.id)}
+                            aria-label={color.name}
+                            title={`Accent: ${color.name}`}
+                          >
+                            {configuration.accentColorId === color.id && <span className="check">✓</span>}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="step-nav-footer">
+                      <button className="nav-next-btn" onClick={() => setActiveTab('hardware')}>
+                        Continue to Hardware &amp; Craft →
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Tab 2: Hardware & Craft */}
+                {activeTab === 'hardware' && (
+                  <div className="control-section tab-panel">
+                    <div className="section-title">
+                      <div>
+                        <span className="section-index">02</span>
+                        <h3>Hardware &amp; Craft Details</h3>
+                      </div>
+                    </div>
+
+                    <label className="select-row">
+                      <span>
+                        <b>Hardware Finish</b>
+                        <small>Solid fittings in polished, brushed, or matte finishes</small>
+                      </span>
+                      <select
+                        value={configuration.hardware}
+                        onChange={(e) => update('hardware', e.target.value as HardwareId)}
+                      >
+                        {HARDWARE_LIST.map((h) => (
+                          <option key={h.id} value={h.id}>
+                            {h.name} (+₹{h.surcharge})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="select-row">
+                      <span>
+                        <b>Saddler Linen Thread</b>
+                        <small>Waxed French saddler stitching</small>
+                      </span>
+                      <select
+                        value={configuration.threadColorId ?? 'cream'}
+                        onChange={(e) => update('threadColorId', e.target.value)}
+                      >
+                        {THREAD_LIST.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="select-row">
+                      <span>
+                        <b>Hand-Finished Edge Paint</b>
+                        <small>Burnished Italian edge lacquer</small>
+                      </span>
+                      <select
+                        value={configuration.edgeColorId ?? 'match'}
+                        onChange={(e) => update('edgeColorId', e.target.value)}
+                      >
+                        {EDGE_LIST.map((e) => (
+                          <option key={e.id} value={e.id}>
+                            {e.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="select-row">
+                      <span>
+                        <b>Interior Lining Material</b>
+                        <small>Protective luxury lining</small>
+                      </span>
+                      <select
+                        value={configuration.liningColorId ?? 'sand'}
+                        onChange={(e) => update('liningColorId', e.target.value)}
+                      >
+                        {LINING_LIST.map((l) => (
+                          <option key={l.id} value={l.id}>
+                            {l.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    {product.supportsStrap && (
+                      <label className="toggle-row">
+                        <span>
+                          <b>Removable Shoulder Strap</b>
+                          <small>Detachable strap with matching brass clips</small>
+                        </span>
+                        <input
+                          type="checkbox"
+                          checked={configuration.removableStrap}
+                          onChange={(e) => update('removableStrap', e.target.checked)}
+                        />
+                      </label>
+                    )}
+
+                    {product.supportsPadding && (
+                      <label className="toggle-row">
+                        <span>
+                          <b>Protective Padded Lining</b>
+                          <small>Dense shock-absorbing interior cushioning</small>
+                        </span>
+                        <input
+                          type="checkbox"
+                          checked={configuration.paddedLining}
+                          onChange={(e) => update('paddedLining', e.target.checked)}
+                        />
+                      </label>
+                    )}
+
+                    {product.supportsPockets && (
+                      <label className="select-row pocket-row">
+                        <span>
+                          <b>Interior Pockets</b>
+                          <small>Card slots, drop-pockets, and compartments</small>
+                        </span>
+                        <select
+                          value={configuration.pocketCount}
+                          onChange={(e) => update('pocketCount', Number(e.target.value))}
+                        >
+                          <option value={0}>None</option>
+                          <option value={1}>1 interior pocket</option>
+                          <option value={2}>2 interior pockets</option>
+                          <option value={3}>3 interior pockets</option>
+                          <option value={4}>4 interior pockets</option>
+                          <option value={5}>5 interior pockets</option>
+                        </select>
+                      </label>
+                    )}
+
+                    <div className="step-nav-footer">
+                      <button className="nav-prev-btn" onClick={() => setActiveTab('leather')}>
+                        ← Back to Leather
+                      </button>
+                      <button className="nav-next-btn" onClick={() => setActiveTab('size')}>
+                        Continue to Size &amp; Fit →
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Tab 3: Size & Proportions */}
+                {activeTab === 'size' && (
+                  <div className="control-section tab-panel">
+                    <div className="section-title">
+                      <div>
+                        <span className="section-index">03</span>
+                        <h3>Size &amp; Proportions</h3>
+                      </div>
+                      <span className="unit-note">CENTIMETRES</span>
+                    </div>
+
+                    {/* Quick Size Preset Cards */}
+                    <div className="size-presets-grid">
+                      {(['compact', 'standard', 'roomy'] as const).map((key) => {
+                        const p = SIZE_PRESETS[configuration.productId]?.[key]
+                        if (!p) return null
+                        const isMatch =
+                          configuration.widthCm === p.w &&
+                          configuration.heightCm === p.h &&
+                          configuration.depthCm === p.d
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            className={`size-preset-card ${isMatch ? 'active' : ''}`}
+                            onClick={() => applySizePreset(key)}
+                          >
+                            <span className="preset-size-name">{p.label}</span>
+                            <span className="preset-size-dim">
+                              {p.w} × {p.h} × {p.d} cm
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+
+                    <div className="fine-tuning-heading">Fine-Tune Dimensions:</div>
+
+                    <div className="dimension-fields">
+                      {([
+                        ['widthCm', 'Width', product.dimensions.width],
+                        ['heightCm', 'Height', product.dimensions.height],
+                        ['depthCm', 'Depth / Gusset', product.dimensions.depth],
+                      ] as const).map(([key, label, range]) => (
+                        <label className="dimension-field" key={key}>
+                          <span>{label}</span>
+                          <div>
+                            <input
+                              type="range"
+                              min={range[0]}
+                              max={range[1]}
+                              step={0.5}
+                              value={configuration[key]}
+                              onChange={(e) => update(key, Number(e.target.value))}
+                            />
+                            <span className="range-num">{configuration[key]} cm</span>
+                          </div>
+                          <small>{range[0]}–{range[1]} cm allowable workshop limit</small>
+                        </label>
+                      ))}
+                    </div>
+
+                    <div className="step-nav-footer">
+                      <button className="nav-prev-btn" onClick={() => setActiveTab('hardware')}>
+                        ← Back to Hardware
+                      </button>
+                      <button className="nav-next-btn" onClick={() => setActiveTab('monogram')}>
+                        Continue to Monogram →
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Tab 4: Monogram & Personalization */}
+                {activeTab === 'monogram' && (
+                  <div className="control-section tab-panel">
+                    <div className="section-title">
+                      <div>
+                        <span className="section-index">04</span>
+                        <h3>Bespoke Monogram</h3>
+                      </div>
+                      <span className="badge-foil">Hot Foil Stamping</span>
+                    </div>
+
+                    <div className="monogram-grid">
+                      <label className="monogram-text-field">
+                        <span className="field-label">INITIALS (UP TO 3 CHARACTERS)</span>
+                        <input
+                          type="text"
+                          maxLength={3}
+                          value={configuration.monogram}
+                          onChange={(e) =>
+                            update('monogram', e.target.value.toUpperCase().replace(/[^A-Z0-9 .&-]/g, ''))
+                          }
+                          placeholder="AB"
+                        />
+                      </label>
+
+                      {/* Live Typography Preview Pill */}
+                      {configuration.monogram && (
+                        <div className="monogram-live-preview-box">
+                          <span className="field-label">LIVE 3D FOIL PREVIEW:</span>
+                          <div
+                            className="preview-monogram-sample"
+                            style={{
+                              fontFamily:
+                                configuration.monogramFont === 'script'
+                                  ? 'Pinyon Script, cursive'
+                                  : configuration.monogramFont === 'sans'
+                                    ? 'Instrument Sans, sans-serif'
+                                    : 'Newsreader, serif',
+                              color: configuration.monogramMethod.includes('gold')
+                                ? '#d4aa4a'
+                                : configuration.monogramMethod.includes('silver')
+                                  ? '#c5c8cc'
+                                  : configuration.monogramMethod.includes('rose')
+                                    ? '#cb9285'
+                                    : '#222',
+                            }}
+                          >
+                            {configuration.monogram}
+                          </div>
+                        </div>
+                      )}
+
+                      <label className="select-row">
+                        <span><b>Stamping Finish</b></span>
+                        <select
+                          value={configuration.monogramMethod}
+                          onChange={(e) => update('monogramMethod', e.target.value as MonogramMethod)}
+                        >
+                          {FOIL_LIST.map((f) => (
+                            <option key={f.id} value={f.id}>
+                              {f.name} (+₹{f.surcharge})
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <div className="two-cols">
+                        <label className="select-row">
+                          <span><b>Typography Style</b></span>
+                          <select
+                            value={configuration.monogramFont ?? 'serif'}
+                            onChange={(e) => update('monogramFont', e.target.value as MonogramFont)}
+                          >
+                            <option value="serif">Timeless Serif</option>
+                            <option value="script">Calligraphy Script</option>
+                            <option value="sans">Modern Sans</option>
+                          </select>
+                        </label>
+
+                        <label className="select-row">
+                          <span><b>Placement Position</b></span>
+                          <select
+                            value={configuration.monogramPlacement ?? 'center'}
+                            onChange={(e) => update('monogramPlacement', e.target.value as MonogramPlacement)}
+                          >
+                            <option value="center">Front Center</option>
+                            <option value="corner">Lower Right Corner</option>
+                          </select>
+                        </label>
+                      </div>
+
+                      <label className="select-row">
+                        <span><b>Size Scale</b></span>
+                        <div className="pills-row">
+                          {(['S', 'M', 'L'] as MonogramSize[]).map((sz) => (
+                            <button
+                              key={sz}
+                              type="button"
+                              className={`pill-btn ${configuration.monogramSize === sz ? 'selected' : ''}`}
+                              onClick={() => update('monogramSize', sz)}
+                            >
+                              {sz === 'S' ? 'Small (Subtle)' : sz === 'M' ? 'Medium (Standard)' : 'Large (Bold)'}
+                            </button>
+                          ))}
+                        </div>
+                      </label>
+                    </div>
+
+                    <label className="custom-request-field">
+                      <span className="field-label">SPECIAL ARTISAN INSTRUCTIONS <span>OPTIONAL</span></span>
+                      <textarea
+                        rows={2}
+                        maxLength={240}
+                        value={configuration.customRequest}
+                        onChange={(e) => update('customRequest', e.target.value)}
+                        placeholder="e.g. Please use contrast edge paint or double stitching on shoulder strap..."
+                      />
+                    </label>
+
+                    <div className="step-nav-footer">
+                      <button className="nav-prev-btn" onClick={() => setActiveTab('size')}>
+                        ← Back to Size
+                      </button>
+                      <button className="nav-next-btn" onClick={() => setActiveTab('review')}>
+                        Review Specification &amp; Cost →
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Tab 5: Workshop Specification & Review */}
+                {activeTab === 'review' && (
+                  <div className="control-section tab-panel">
+                    <div className="section-title">
+                      <div>
+                        <span className="section-index">05</span>
+                        <h3>Artisan Build Sheet &amp; Quote</h3>
+                      </div>
+                      <span className={`status-indicator ${errors.length ? 'invalid' : 'ready'}`}>
+                        {errors.length ? '⚠ Adjustments Required' : '✓ Ready for Bench'}
+                      </span>
+                    </div>
+
+                    {errors.length > 0 && (
+                      <div className="issue-list" role="alert">
+                        {errors.map((issue) => (
+                          <p key={issue.code}>{issue.message}</p>
+                        ))}
+                        {recommendations.map((item, index) => (
+                          <button
+                            className="recommendation"
+                            key={`${item.title}-${index}`}
+                            onClick={() => setConfiguration(item.configuration)}
+                          >
+                            <span>TRY THIS INSTEAD</span>
+                            <b>{item.title}</b>
+                            <small>{item.changes.join(' · ')}</small>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Cost Breakdown Table */}
+                    <div className="breakdown-grid" style={{ marginBottom: '16px' }}>
+                      <div className="b-row">
+                        <span>Leather hide ({studioCost.leatherAreaSqFt} sq.ft @ ₹{studioCost.ratePerSqFtUsed})</span>
+                        <b>{formatMoney(studioCost.leatherCost)}</b>
+                      </div>
+                      <div className="b-row">
+                        <span>Hardware kit ({configuration.hardware})</span>
+                        <b>{formatMoney(studioCost.hardwareCost)}</b>
+                      </div>
+                      <div className="b-row">
+                        <span>Artisan bench craft &amp; edge burnish</span>
+                        <b>{formatMoney(studioCost.laborCost)}</b>
+                      </div>
+                      <div className="b-row">
+                        <span>Reinforced lining &amp; pocket construction</span>
+                        <b>{formatMoney(studioCost.liningCost)}</b>
+                      </div>
+                      {studioCost.monogramCost > 0 && (
+                        <div className="b-row">
+                          <span>Custom monogram &amp; foil stamp</span>
+                          <b>{formatMoney(studioCost.monogramCost)}</b>
+                        </div>
+                      )}
+                      <div className="b-row total">
+                        <span>Total Indicative Price</span>
+                        <b>{formatMoney(studioCost.total)}</b>
+                      </div>
+                    </div>
+
+                    <pre className="workshop-spec-sheet" id="workshop-spec" tabIndex={0}>
+                      {workshopSpecText}
+                    </pre>
+
+                    <div className="spec-action-buttons">
+                      <button className="primary-button" onClick={copyWorkshopSpec}>
+                        📋 Copy Workshop Spec
+                      </button>
+                      <button className="secondary-button" onClick={downloadSpecFile}>
+                        ⤓ Download Spec (.txt)
+                      </button>
+                    </div>
+
+                    <div className="design-code-box">
+                      <label htmlFor="design-code-field">
+                        <span>Portable Design Code (Share or Reopen)</span>
+                        <div className="code-input-row">
+                          <input
+                            id="design-code-field"
+                            type="text"
+                            value={designCodeInput}
+                            onChange={(e) => setDesignCodeInput(e.target.value)}
+                            placeholder="Paste design code here..."
+                          />
+                          <button type="button" onClick={importDesignCode}>Open</button>
+                        </div>
+                      </label>
+                      <button type="button" className="text-link" onClick={exportDesignCode}>
+                        Generate current design code ↗
+                      </button>
+                    </div>
+
+                    <div className="commercial-actions" style={{ marginTop: '16px' }}>
+                      <button
+                        className="quote-request-button"
+                        disabled={errors.length > 0}
+                        onClick={() => {
+                          setShowQuoteForm(true)
+                          setQuotePrepared(false)
+                        }}
+                      >
+                        Request Consultation &amp; Artisan Quote <span>↗</span>
+                      </button>
+                      <button className="print-btn" onClick={() => window.print()}>
+                        Print Design Brief ⌁
+                      </button>
+                    </div>
+
+                    <div className="step-nav-footer">
+                      <button className="nav-prev-btn" onClick={() => setActiveTab('monogram')}>
+                        ← Back to Monogram
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </section>
             </div>
-            <div className="trust-note"><span>✳</span><p><b>Every detail has a reason.</b><br />Thoughtful materials. Skilled hands. Made to last.</p></div>
-          </aside>
-        </div>
 
-        <section className="materials-section" id="materials">
-          <div className="section-kicker">A CLOSER LOOK AT MATERIALS <span>02 — 03</span></div>
-          <div className="materials-heading"><h2>Good things<br /><em>get better with age.</em></h2><p>Leather is a living material. The right hide has its own character, its own story, and a way of becoming more yours with every use.</p></div>
-          <div className="material-cards">
-            {LEATHERS.map((item, index) => (
-              <article className={`material-card ${configuration.leatherId === item.id ? 'chosen' : ''}`} key={item.id}>
-                <div className={`material-image texture-${index}`}><span>{item.grade.toUpperCase()}</span><button onClick={() => { update('leatherId', item.id); goTo('design') }} aria-label={`Choose ${item.name}`}>↗</button></div>
-                <div className="material-card-body"><div><h3>{item.name}</h3><span>{item.finish}</span></div><p>{item.description}</p><div className="material-meta"><span>{item.temper}</span><span>{item.thickness.toFixed(1)} mm</span></div></div>
-              </article>
-            ))}
-          </div>
-          <p className="sample-data-note">Material details and costs are demonstration data; confirm grades, finishes, availability and prices with the supplier.</p>
-        </section>
+            {/* Materials Knowledge Library Section */}
+            <section className="materials-section" id="materials">
+              <div className="section-kicker">
+                THE HIDE &amp; GRAIN LIBRARY <span>02 — 03</span>
+              </div>
+              <div className="materials-heading">
+                <h2>
+                  Living materials<br />
+                  <em>that mature with grace.</em>
+                </h2>
+                <p>
+                  Learn how each hide grade, tanning method, and grain finish behaves over years of daily carry.
+                </p>
+              </div>
 
-        <section className="craft-section" id="details">
-          <div className="craft-copy"><span className="section-kicker">A NOTE FROM THE WORKSHOP</span><h2>Made slowly.<br /><em>Made to stay.</em></h2><p>Every piece begins with a material and a little imagination. We bring them together with care, then let the details do the talking.</p><button className="text-button" onClick={() => setShowQuoteForm(true)}>Talk to an artisan ↗</button></div>
-          <div className="craft-steps"><div><span>01</span><b>Choose with care</b><p>Find a shape, a hide and a palette that feel like you.</p></div><div><span>02</span><b>Made by hand</b><p>Your brief goes to a maker for a thoughtful review.</p></div><div><span>03</span><b>Made to keep</b><p>A personal piece, finished for the long way round.</p></div></div>
-        </section>
-        </>
+              <div className="material-cards">
+                {LEATHERS.map((item, index) => (
+                  <article
+                    className={`material-card ${configuration.leatherId === item.id ? 'chosen' : ''}`}
+                    key={item.id}
+                  >
+                    <div className={`material-image texture-${index}`}>
+                      <span>{item.grade.toUpperCase()}</span>
+                      <button
+                        onClick={() => {
+                          update('leatherId', item.id)
+                          setActiveTab('leather')
+                          document.getElementById('design')?.scrollIntoView({ behavior: 'smooth' })
+                        }}
+                        aria-label={`Choose ${item.name}`}
+                      >
+                        Select ↗
+                      </button>
+                    </div>
+                    <div className="material-card-body">
+                      <div>
+                        <h3>{item.name}</h3>
+                        <span>{item.finish}</span>
+                      </div>
+                      <p>{item.description}</p>
+                      <div className="material-meta">
+                        <span>{item.temper}</span>
+                        <span>{item.thickness.toFixed(1)} mm</span>
+                        <span>₹{item.ratePerSqFt}/sq.ft</span>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          </>
         )}
       </main>
 
-      <footer className="site-footer"><a className="brand" href="#"><span className="brand-mark">A<span>07</span></span><span className="brand-name">ATELIER <b>N°07</b></span></a><span>OBJECTS WITH A LITTLE MORE MEANING.</span><span>DEMO STUDIO · 2026</span></footer>
+      {/* Footer */}
+      <footer className="site-footer">
+        <a className="brand" href="#">
+          <span className="brand-mark">SN<span>07</span></span>
+          <span className="brand-name">SYNERGY<b>NEXUS</b> × CARRY</span>
+        </a>
+        <span>SIMULATION-BASED BESPOKE LEATHER GOODS CONFIGURATOR</span>
+        <span>ATELIER 2026</span>
+      </footer>
 
-      <div className="print-sheet" aria-hidden="true">
-        <h1>Atelier N°07 — Design brief</h1><p>DEMONSTRATION ONLY · NOT A PRODUCTION SPECIFICATION</p>
-        <p>Design ID: {designIdentity.id ?? 'Not yet saved'} · Version: {displayedVersion || 'Draft'}</p>
-        <h2>{product.name}</h2><ul>{configurationSummary(configuration).map((item) => <li key={item}>{item}</li>)}</ul>
-        <h3>Material &amp; finish</h3><p>{leather.name} · {leather.grade} · {leather.finish} · {leather.thickness.toFixed(1)} mm · {selectedColor.name}</p>
-        <p>Hardware: {configuration.hardware}. Monogram: {configuration.monogram || 'none'} {configuration.monogram && `(${configuration.monogramMethod})`}.</p>
-        <p>Supplier source/procurement reference: not mapped. Price: unavailable. Lead time: to be confirmed by the workshop.</p>
-        <h3>Review status</h3><p>{errors.length ? `NOT VALIDATED — ${errors.map((item) => item.message).join(' ')}` : warnings.length ? 'Requires artisan review.' : 'Passed sample rules only; confirm with the workshop before production.'}</p>
-        <h3>Price status</h3><p>{price.reason}</p>
-        {configuration.customRequest && <><h3>Customer note for artisan</h3><p>{configuration.customRequest}</p></>}
-        <p>All catalog constraints and prices in this demo are illustrative, not verified manufacturing data or a customer quote.</p>
-      </div>
-
+      {/* Floating AI Assistant Modal */}
       {assistantOpen && (
-        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setAssistantOpen(false) }}>
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setAssistantOpen(false)
+          }}
+        >
           <section className="assistant-panel" role="dialog" aria-modal="true" aria-labelledby="assistant-title">
-            <div className="assistant-head"><div><span className="assistant-spark">✳</span><div><span className="small-label">ATELIER N°07</span><h2 id="assistant-title">Design, together.</h2></div></div><button className="close-button" onClick={() => setAssistantOpen(false)} aria-label="Close assistant">×</button></div>
-            <p className="assistant-disclaimer">A simple on-device demo assistant. It maps known words to the sample catalog; no AI service is connected.</p>
-            <div className="chat-messages" aria-live="polite">
-              {messages.map((message, index) => <div className={`chat-bubble ${message.role}`} key={`${message.role}-${index}`}><span>{message.role === 'assistant' ? 'ATELIER' : 'YOU'}</span><p>{message.text}</p></div>)}
+            <div className="assistant-head">
+              <div>
+                <span className="assistant-spark">✳</span>
+                <div>
+                  <span className="small-label">SYNERGYNEXUS AI ASSISTANT</span>
+                  <h2 id="assistant-title">Artisan Co-Designer</h2>
+                </div>
+              </div>
+              <button
+                className="close-button"
+                onClick={() => setAssistantOpen(false)}
+                aria-label="Close assistant"
+              >
+                ×
+              </button>
             </div>
+            <p className="assistant-disclaimer">
+              Describe your dream bag, budget, or preferred colors in natural language. The assistant maps recognized terms directly to 3D configurable choices.
+            </p>
+
+            <div className="chat-messages" aria-live="polite">
+              {messages.map((message, index) => (
+                <div className={`chat-bubble ${message.role}`} key={`${message.role}-${index}`}>
+                  <span>{message.role === 'assistant' ? 'ATELIER AI' : 'YOU'}</span>
+                  <p>{message.text}</p>
+                </div>
+              ))}
+            </div>
+
             {proposal && (
               <div className="proposal-card">
-                <span className="small-label">A PROPOSAL FOR YOU</span>
-                <ul>{configurationSummary(proposal.configuration).map((item) => <li key={item}>{item}</li>)}</ul>
-                {proposal.questions.map((question) => <p className="proposal-question" key={question}>? {question}</p>)}
-                <button className="primary-button" onClick={applyProposal}>Review &amp; apply <span>→</span></button>
+                <span className="small-label">PROPOSED CONFIGURATION</span>
+                <ul>
+                  {configurationSummary(proposal.configuration).map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+                {proposal.questions.map((question) => (
+                  <p className="proposal-question" key={question}>
+                    ? {question}
+                  </p>
+                ))}
+                <button className="primary-button" onClick={applyProposal}>
+                  Apply to 3D Studio <span>→</span>
+                </button>
               </div>
             )}
-            <form className="chat-form" onSubmit={handleAssistantSubmit}><label htmlFor="assistant-input" className="sr-only">Describe your design</label><input id="assistant-input" value={messageInput} onChange={(event) => setMessageInput(event.target.value)} placeholder="Describe the piece you’re imagining..." /><button type="submit" aria-label="Send message">↑</button></form>
+
+            <form className="chat-form" onSubmit={handleAssistantSubmit}>
+              <input
+                id="assistant-input"
+                value={messageInput}
+                onChange={(e) => setMessageInput(e.target.value)}
+                placeholder="e.g. Cognac veg-tan handbag with brass hardware and gold foil PY..."
+              />
+              <button type="submit" aria-label="Send message">
+                ↑
+              </button>
+            </form>
+
             <div className="reference-box">
-              <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => handleReference(event.target.files?.[0])} />
-              <button className="upload-button" onClick={() => fileRef.current?.click()}>＋ <span>{referenceName ? 'Change reference image' : 'Add a reference image'}</span></button>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="sr-only"
+                onChange={(e) => handleReference(e.target.files?.[0])}
+              />
+              <button className="upload-button" onClick={() => fileRef.current?.click()}>
+                ＋ <span>{referenceName ? 'Change reference photo' : 'Attach reference photo'}</span>
+              </button>
               {referenceError && <p className="upload-error">{referenceError}</p>}
-              {referenceImage && <div className="reference-preview"><img src={referenceImage} alt="Customer-provided design reference" /><span>{referenceName} · session only</span><button onClick={() => { setReferenceImage(''); setReferenceName('') }}>Remove</button></div>}
-              <p>JPEG, PNG or WebP · max 5 MB. Image interpretation and cloud storage are not configured; your image stays in this browser session.</p>
+              {referenceImage && (
+                <div className="reference-preview">
+                  <img src={referenceImage} alt="Customer reference photo" />
+                  <span>{referenceName}</span>
+                  <button onClick={() => { setReferenceImage(''); setReferenceName('') }}>Remove</button>
+                </div>
+              )}
             </div>
           </section>
         </div>
       )}
 
+      {/* Quote / Consultation Dialog */}
       {showQuoteForm && (
-        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowQuoteForm(false) }}>
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setShowQuoteForm(false)
+          }}
+        >
           <section className="quote-dialog" role="dialog" aria-modal="true" aria-labelledby="quote-title">
-            <button className="close-button" onClick={() => setShowQuoteForm(false)} aria-label="Close quote form">×</button>
-            {quotePrepared ? <><span className="quote-icon">✓</span><h2 id="quote-title">Your brief is ready.</h2><p>This demo cannot transmit quote requests. Your design summary is ready to print or share for an artisan conversation.</p><button className="primary-button" onClick={() => { setShowQuoteForm(false); window.print() }}>Print your brief <span>↗</span></button></> : <>
-              <span className="small-label">THE NEXT STEP</span><h2 id="quote-title">Let’s talk it through.</h2><p>A maker can review your choices, confirm what’s possible, and provide an accurate quote.</p>
-              {errors.length > 0 && <p className="quote-warning">There are still items to resolve in the sample validation. You can prepare a brief, but it is not production-ready.</p>}
-              <form onSubmit={submitQuoteRequest}><label>Your name<input required name="name" autoComplete="name" placeholder="Name" /></label><label>Email address<input required name="email" type="email" autoComplete="email" placeholder="you@example.com" /></label><label>A note for the maker<textarea name="note" rows={3} placeholder="Anything else we should know?" /></label><p className="privacy-note">This demo does not send or store this information. Connecting a secure quote service is required for submission.</p><button className="primary-button" type="submit">Prepare my brief <span>→</span></button></form>
-            </>}
+            <button className="close-button" onClick={() => setShowQuoteForm(false)} aria-label="Close quote form">
+              ×
+            </button>
+            {quotePrepared ? (
+              <>
+                <span className="quote-icon">✓</span>
+                <h2 id="quote-title">Specification Brief Prepared.</h2>
+                <p>
+                  Your bespoke specification {designIdentity.id} v{displayedVersion} is ready for consultation with Carry master artisans.
+                </p>
+                <button className="primary-button" onClick={() => { setShowQuoteForm(false); window.print() }}>
+                  Print Artisan Brief <span>↗</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <span className="small-label">BESPOKE WORKSHOP CONSULTATION</span>
+                <h2 id="quote-title">Book Artisan Review</h2>
+                <p>
+                  Review your {product.name} specification with an artisan before production begins.
+                </p>
+                <form onSubmit={submitQuoteRequest}>
+                  <label>
+                    Full Name
+                    <input required name="name" autoComplete="name" placeholder="Your name" />
+                  </label>
+                  <label>
+                    Email Address
+                    <input required name="email" type="email" autoComplete="email" placeholder="you@example.com" />
+                  </label>
+                  <label>
+                    Custom Consultation Notes
+                    <textarea name="note" rows={3} placeholder="Any specific requirements regarding fitting, delivery dates or hardware..." />
+                  </label>
+                  <button className="primary-button" type="submit">
+                    Generate Production Order Brief <span>→</span>
+                  </button>
+                </form>
+              </>
+            )}
           </section>
         </div>
       )}
 
-      {savedDesignState.error && <div className="toast" role="alert"><span>!</span>{savedDesignState.error}<button onClick={() => setSavedDesignState((previous) => ({ ...previous, error: '' }))} aria-label="Dismiss saved design error">×</button></div>}
-
+      {/* Saved Versions Drawer */}
       {savedDesignsOpen && (
-        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSavedDesignsOpen(false) }}>
-          <section className="saved-designs-dialog" role="dialog" aria-modal="true" aria-labelledby="saved-designs-title">
-            <div className="saved-dialog-head"><div><span className="small-label">BROWSER-LOCAL HISTORY</span><h2 id="saved-designs-title">Saved designs.</h2></div><button className="close-button" onClick={() => setSavedDesignsOpen(false)} aria-label="Close saved designs">×</button></div>
-            <p>Saved snapshots stay in this browser only. They are not backed up or available to the workshop. Share a selected version to create a portable link without monogram text or customer notes.</p>
-            {savedDesigns.length === 0 ? <div className="saved-empty">No saved designs yet. Save the current configuration to start a version history.</div> : <div className="saved-list">{savedDesigns.map((saved) => <article key={`${saved.id}-${saved.version}`}>
-              <div><b>{productById(saved.configuration.productId).name} · v{saved.version}</b><small>{saved.id} · {new Date(saved.savedAt).toLocaleString()}</small><span>{configurationSummary(saved.configuration).slice(1, 4).join(' · ')}</span></div>
-              <button onClick={() => restoreDesignVersion(saved)}>Open version</button>
-            </article>)}</div>}
-            <button className="primary-button" onClick={() => { setSavedDesignsOpen(false); saveCurrentDesign() }}>Save current version <span>♡</span></button>
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setSavedDesignsOpen(false)
+          }}
+        >
+          <section className="saved-designs-dialog" role="dialog" aria-modal="true" aria-labelledby="saved-title">
+            <div className="saved-dialog-head">
+              <div>
+                <span className="small-label">IMMUTABLE SNAPSHOT HISTORY</span>
+                <h2 id="saved-title">Saved Versions</h2>
+              </div>
+              <button className="close-button" onClick={() => setSavedDesignsOpen(false)} aria-label="Close saved designs">
+                ×
+              </button>
+            </div>
+            {savedDesigns.length === 0 ? (
+              <div className="saved-empty">No saved design versions in this browser yet.</div>
+            ) : (
+              <div className="saved-list">
+                {savedDesigns.map((saved) => (
+                  <article key={`${saved.id}-${saved.version}`}>
+                    <div>
+                      <b>{productById(saved.configuration.productId).name} · v{saved.version}</b>
+                      <small>{saved.id} · {new Date(saved.savedAt).toLocaleDateString()}</small>
+                      <span>{configurationSummary(saved.configuration).slice(1, 4).join(' · ')}</span>
+                    </div>
+                    <button onClick={() => restoreDesignVersion(saved)}>Restore v{saved.version}</button>
+                  </article>
+                ))}
+              </div>
+            )}
+            <button className="primary-button" onClick={() => { setSavedDesignsOpen(false); saveCurrentDesign() }}>
+              Save current configuration as new version <span>♡</span>
+            </button>
           </section>
         </div>
       )}
 
-      {notice && <div className="toast" role="status"><span>✳</span>{notice}<button onClick={() => setNotice('')} aria-label="Dismiss notification">×</button></div>}
+      {/* Authentication & Role Differentiation Portal */}
+      {authModalOpen && (
+        <LoginPage
+          initialRole={authInitialRole}
+          onSuccess={(session) => {
+            setUserSession(session)
+            setAuthModalOpen(false)
+            setNotice(`Welcome back, ${session.fullName} (${session.role === 'admin' ? 'Master Artisan' : 'Bespoke Patron'}).`)
+            if (session.role === 'admin' && (authInitialRole === 'admin' || window.location.hash.includes('admin'))) {
+              setAdminOpen(true)
+              setMarketOpen(false)
+              window.location.hash = '#admin'
+            }
+          }}
+          onCancel={() => {
+            setAuthModalOpen(false)
+            if (window.location.hash.includes('admin')) {
+              window.location.hash = ''
+            }
+          }}
+        />
+      )}
+
+      {/* Smart Style & Harmony Recommendation Modal */}
+      <RecommendationModal
+        isOpen={recommendationOpen}
+        onClose={() => setRecommendationOpen(false)}
+        currentConfig={configuration}
+        onApplyRecommendation={(rec) => {
+          pushHistory(configuration)
+          setConfiguration((prev) => ({ ...prev, ...rec }))
+          setNotice('Applied recommended artisan styling.')
+        }}
+        targetBudget={budgetNumber > 0 ? budgetNumber : undefined}
+      />
+
+      {/* Notification Toast */}
+      {notice && (
+        <div className="toast" role="status">
+          <span>✳</span>
+          {notice}
+          <button onClick={() => setNotice('')} aria-label="Dismiss notification">
+            ×
+          </button>
+        </div>
+      )}
     </div>
   )
 }
-
 export default App
