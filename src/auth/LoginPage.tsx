@@ -3,7 +3,6 @@ import './LoginPage.css'
 import {
   saveSession,
   DEFAULT_ADMIN_USER,
-  DEFAULT_CUSTOMER_USER,
   DEMO_CUSTOMERS,
   type UserSession,
   type UserRole,
@@ -26,11 +25,6 @@ export function LoginPage({ onSuccess, onCancel, initialRole = 'customer' }: Log
   const handleSelectSession = (session: UserSession) => {
     saveSession(session)
     onSuccess(session)
-  }
-
-  const handleQuickLogin = (targetRole: UserRole) => {
-    const session = targetRole === 'admin' ? DEFAULT_ADMIN_USER : DEFAULT_CUSTOMER_USER
-    handleSelectSession(session)
   }
 
   const handleSubmit = (e: React.FormEvent) => {
