@@ -19,13 +19,31 @@ export const DEFAULT_ADMIN_USER: UserSession = {
   title: 'Head of Bespoke Workshop',
 }
 
-export const DEFAULT_CUSTOMER_USER: UserSession = {
-  id: 'c0000000-0000-0000-0000-000000000002',
-  email: 'ananya.sharma@example.com',
-  fullName: 'Ananya Sharma',
-  role: 'customer',
-  title: 'Bespoke Patron',
-}
+export const DEMO_CUSTOMERS: UserSession[] = [
+  {
+    id: 'c0000000-0000-0000-0000-000000000001',
+    email: 'ananya.sharma@luxury.in',
+    fullName: 'Ananya Sharma',
+    role: 'customer',
+    title: 'VIP Bespoke Patron · Mumbai',
+  },
+  {
+    id: 'c0000000-0000-0000-0000-000000000002',
+    email: 'vikram.mehta@heritage.in',
+    fullName: 'Vikramaditya Mehta',
+    role: 'customer',
+    title: 'Heritage Collector · New Delhi',
+  },
+  {
+    id: 'c0000000-0000-0000-0000-000000000003',
+    email: 'rhea.sengupta@design.in',
+    fullName: 'Rhea Sengupta',
+    role: 'customer',
+    title: 'Architect & Designer · Bengaluru',
+  },
+]
+
+export const DEFAULT_CUSTOMER_USER: UserSession = DEMO_CUSTOMERS[0]
 
 export function getCurrentSession(): UserSession | null {
   try {

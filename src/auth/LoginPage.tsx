@@ -4,6 +4,7 @@ import {
   saveSession,
   DEFAULT_ADMIN_USER,
   DEFAULT_CUSTOMER_USER,
+  DEMO_CUSTOMERS,
   type UserSession,
   type UserRole,
 } from './authStore'
@@ -22,10 +23,14 @@ export function LoginPage({ onSuccess, onCancel, initialRole = 'customer' }: Log
   const [isRegistering, setIsRegistering] = useState(false)
   const [error, setError] = useState('')
 
-  const handleQuickLogin = (targetRole: UserRole) => {
-    const session = targetRole === 'admin' ? DEFAULT_ADMIN_USER : DEFAULT_CUSTOMER_USER
+  const handleSelectSession = (session: UserSession) => {
     saveSession(session)
     onSuccess(session)
+  }
+
+  const handleQuickLogin = (targetRole: UserRole) => {
+    const session = targetRole === 'admin' ? DEFAULT_ADMIN_USER : DEFAULT_CUSTOMER_USER
+    handleSelectSession(session)
   }
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -103,30 +108,35 @@ export function LoginPage({ onSuccess, onCancel, initialRole = 'customer' }: Log
             <button
               type="button"
               className="quick-btn"
-              onClick={() => handleQuickLogin('admin')}
+              onClick={() => handleSelectSession(DEFAULT_ADMIN_USER)}
             >
               <div>
                 <b>Log in as Master Craftsman</b>
                 <small style={{ display: 'block', color: '#9c9285', fontSize: '10.5px' }}>
-                  admin@carrytote.in (Full Operations &amp; Inventory Access)
+                  admin@carrytote.in · Head of Bespoke Workshop (Full Admin &amp; Stock Access)
                 </small>
               </div>
               <span>Enter Hub →</span>
             </button>
           ) : (
-            <button
-              type="button"
-              className="quick-btn"
-              onClick={() => handleQuickLogin('customer')}
-            >
-              <div>
-                <b>Log in as Bespoke Patron</b>
-                <small style={{ display: 'block', color: '#9c9285', fontSize: '10.5px' }}>
-                  ananya.sharma@example.com (Client 3D Studio &amp; Orders)
-                </small>
-              </div>
-              <span>Enter Studio →</span>
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {DEMO_CUSTOMERS.map((cust) => (
+                <button
+                  key={cust.id}
+                  type="button"
+                  className="quick-btn"
+                  onClick={() => handleSelectSession(cust)}
+                >
+                  <div>
+                    <b>{cust.fullName}</b>
+                    <small style={{ display: 'block', color: '#9c9285', fontSize: '10.5px' }}>
+                      {cust.email} · {cust.title}
+                    </small>
+                  </div>
+                  <span>Select Patron →</span>
+                </button>
+              ))}
+            </div>
           )}
         </div>
 
