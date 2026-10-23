@@ -50,3 +50,4 @@ This file records the user-visible project conversation in this session. Long pa
 - External supplier retrieval, scheduled refresh, a database, authenticated administration, and consultation delivery are not configured.
 - No supplier prices or exchange rates are seeded as live data.
 - Build, test, and lint checks passed after the latest implementation changes.
+- The initial repository commit is `8021dbc` on `main`.
