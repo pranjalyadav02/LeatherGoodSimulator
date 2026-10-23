@@ -19,6 +19,7 @@ import {
   decodeDesignSnapshot,
   encodeDesignSnapshot,
   findBudgetAlternatives,
+  getMaxMonogramCapacity,
   parseDesignRequest,
   recommendAlternatives,
   validateConfiguration,
@@ -37,9 +38,10 @@ import MarketDashboard from './MarketDashboard'
 import Product3DViewer from './Product3DViewer'
 import { AdminPortal } from './admin/AdminPortal'
 import { RecommendationModal } from './RecommendationModal'
-import { submitBespokeQuote } from './api'
+import { submitBespokeQuote, fetchInventory, subscribeToRealtimePrices } from './api'
 import { LoginPage } from './auth/LoginPage'
 import { LeatherLibraryModal } from './LeatherLibraryModal'
+import { PriceHistoryModal } from './PriceHistoryModal'
 import { getCurrentSession, clearSession, type UserSession } from './auth/authStore'
 import {
   loadSavedDesigns,
@@ -347,7 +349,45 @@ export function App() {
   })
   const [recommendationOpen, setRecommendationOpen] = useState(false)
   const [leatherLibraryOpen, setLeatherLibraryOpen] = useState(false)
+  const [priceHistoryOpen, setPriceHistoryOpen] = useState(false)
+  const [customLeatherRates, setCustomLeatherRates] = useState<Record<string, number>>(() => {
+    const initial: Record<string, number> = {}
+    LEATHERS.forEach((l) => {
+      initial[l.id] = l.ratePerSqFt
+    })
+    return initial
+  })
   const fileRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    // Initial fetch of live inventory rates from Supabase / Backend
+    fetchInventory().then((items) => {
+      if (items && items.length > 0) {
+        setCustomLeatherRates((prev) => {
+          const updated = { ...prev }
+          items.forEach((item) => {
+            if (item.ratePerSqFt != null) {
+              updated[item.id] = item.ratePerSqFt
+            }
+          })
+          return updated
+        })
+      }
+    })
+
+    // Real-time price subscription (Supabase Realtime Channel + Cross-Tab Sync)
+    const unsubscribe = subscribeToRealtimePrices((itemId, newRate, itemName) => {
+      setCustomLeatherRates((prev) => ({
+        ...prev,
+        [itemId]: newRate,
+      }))
+      setNotice(`🟢 Live Price Update: ${itemName} adjusted to ₹${newRate}/sq.ft in real time.`)
+    })
+
+    return () => {
+      if (unsubscribe) unsubscribe()
+    }
+  }, [])
 
   useEffect(() => {
     const handleHash = () => {
@@ -371,7 +411,18 @@ export function App() {
   // Validation & Costing
   const issues = useMemo(() => validateConfiguration(configuration), [configuration])
   const errors = issues.filter((issue) => issue.severity === 'error')
-  const studioCost = useMemo(() => calculateStudioCost(configuration), [configuration])
+  const feasibilityWarnings = useMemo(
+    () => issues.filter((issue) => issue.code.startsWith('FEASIBILITY_') || issue.code === 'ARTISAN_REVIEW'),
+    [issues],
+  )
+  const monoCapacity = useMemo(
+    () => getMaxMonogramCapacity(configuration.monogramSize ?? 'M', configuration.productId),
+    [configuration.monogramSize, configuration.productId],
+  )
+  const studioCost = useMemo(
+    () => calculateStudioCost(configuration, customLeatherRates[configuration.leatherId]),
+    [configuration, customLeatherRates],
+  )
 
   const budgetNumber = Number(targetBudget) || 0
   const budgetAlternatives = useMemo(() => {
@@ -723,10 +774,10 @@ export function App() {
     <div className="app-shell">
       {/* Top Studio Header */}
       <header className="site-header">
-        <a className="brand" href="#" aria-label="Atelier N°07 × SynnergyNexus">
-          <span className="brand-mark">SN<span>07</span></span>
+        <a className="brand" href="#" aria-label="Leather Good Simulation Engine">
+          <span className="brand-mark">LG<span>SE</span></span>
           <span className="brand-name">
-            SYNERGY<b>NEXUS</b> <small>× CARRY BESPOKE STUDIO</small>
+            LEATHER GOOD <b>SIMULATION ENGINE</b> <small>· Bespoke Atelier</small>
           </span>
         </a>
 
@@ -1099,10 +1150,19 @@ export function App() {
                         <button
                           type="button"
                           className="text-button"
+                          onClick={() => setPriceHistoryOpen(true)}
+                          style={{ fontSize: '11px', color: 'var(--ink)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', background: 'none', border: 'none', cursor: 'pointer' }}
+                          title="View historical price audit and real-time rate log"
+                        >
+                          📈 Rate History ↗
+                        </button>
+                        <button
+                          type="button"
+                          className="text-button"
                           onClick={() => setLeatherLibraryOpen(true)}
                           style={{ fontSize: '11px', color: 'var(--brown)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', background: 'none', border: 'none', cursor: 'pointer' }}
                         >
-                          📖 Leather Library &amp; Guide ↗
+                          📖 Leather Guide ↗
                         </button>
                         <span className="badge-verified">{leather.status}</span>
                       </div>
@@ -1118,7 +1178,7 @@ export function App() {
                           <span className={`leather-sample sample-${item.id}`} />
                           <span className="leather-option-copy">
                             <b>{item.name}</b>
-                            <small>{item.grade} · {item.thickness} mm · ₹{item.ratePerSqFt}/sq.ft</small>
+                            <small>{item.grade} · {item.thickness} mm · ₹{customLeatherRates[item.id] ?? item.ratePerSqFt}/sq.ft</small>
                           </span>
                           <span className="radio-dot">{configuration.leatherId === item.id && <i />}</span>
                         </button>
@@ -1416,16 +1476,70 @@ export function App() {
                     </div>
 
                     <div className="monogram-grid">
+                      {/* Font Size & Dynamic Capacity Selector */}
+                      <div className="monogram-size-selector-wrap">
+                        <label className="select-row-label">
+                          <b>1. Stamping Typeface Size &amp; Character Capacity</b>
+                          <small style={{ display: 'block', fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>
+                            Font size determines physical brass hot-stamp area and character limit
+                          </small>
+                        </label>
+                        <div className="monogram-size-cards">
+                          {(['S', 'M', 'L'] as MonogramSize[]).map((sz) => {
+                            const cap = getMaxMonogramCapacity(sz, configuration.productId)
+                            const isCurrent = (configuration.monogramSize ?? 'M') === sz
+                            return (
+                              <button
+                                key={sz}
+                                type="button"
+                                className={`mono-size-btn ${isCurrent ? 'active' : ''}`}
+                                onClick={() => {
+                                  const newCap = getMaxMonogramCapacity(sz, configuration.productId)
+                                  let nextMono = configuration.monogram
+                                  if (nextMono.length > newCap.maxChars) {
+                                    nextMono = nextMono.slice(0, newCap.maxChars)
+                                    setNotice(`Initials shortened to ${newCap.maxChars} chars for Font Size ${sz}.`)
+                                  }
+                                  pushHistory(configuration)
+                                  setConfiguration((prev) => ({
+                                    ...prev,
+                                    monogramSize: sz,
+                                    monogram: nextMono,
+                                  }))
+                                }}
+                              >
+                                <span className="mono-size-letter">
+                                  {sz === 'S' ? '16pt' : sz === 'M' ? '22pt' : '28pt'}
+                                </span>
+                                <span className="mono-size-sub">
+                                  {sz === 'S' ? 'Petite' : sz === 'M' ? 'Classic' : 'Display'}
+                                </span>
+                                <span className="mono-size-limit">Max {cap.maxChars} Chars</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                        <div className="mono-size-rule-note">
+                          📐 <b>Physical Stamping Tolerance:</b> {monoCapacity.warning}
+                        </div>
+                      </div>
+
+                      {/* Initials Input with dynamic max and live counter */}
                       <label className="monogram-text-field">
-                        <span className="field-label">INITIALS (UP TO 3 CHARACTERS)</span>
+                        <div className="mono-input-header">
+                          <span className="field-label">2. BESPOKE INITIALS</span>
+                          <span className={`char-counter-pill ${configuration.monogram.length >= monoCapacity.maxChars ? 'at-limit' : ''}`}>
+                            {configuration.monogram.length} / {monoCapacity.maxChars} CHARACTERS
+                          </span>
+                        </div>
                         <input
                           type="text"
-                          maxLength={3}
+                          maxLength={monoCapacity.maxChars}
                           value={configuration.monogram}
                           onChange={(e) =>
                             update('monogram', e.target.value.toUpperCase().replace(/[^A-Z0-9 .&-]/g, ''))
                           }
-                          placeholder="AB"
+                          placeholder={monoCapacity.maxChars === 2 ? 'AB' : monoCapacity.maxChars >= 4 ? 'ABCD' : 'ABC'}
                         />
                       </label>
 
@@ -1442,6 +1556,7 @@ export function App() {
                                   : configuration.monogramFont === 'sans'
                                     ? 'Instrument Sans, sans-serif'
                                     : 'Newsreader, serif',
+                              fontSize: monoCapacity.fontSizePx + 'px',
                               color: configuration.monogramMethod.includes('gold')
                                 ? '#d4aa4a'
                                 : configuration.monogramMethod.includes('silver')
@@ -1494,22 +1609,31 @@ export function App() {
                           </select>
                         </label>
                       </div>
+                    </div>
 
-                      <label className="select-row">
-                        <span><b>Size Scale</b></span>
-                        <div className="pills-row">
-                          {(['S', 'M', 'L'] as MonogramSize[]).map((sz) => (
-                            <button
-                              key={sz}
-                              type="button"
-                              className={`pill-btn ${configuration.monogramSize === sz ? 'selected' : ''}`}
-                              onClick={() => update('monogramSize', sz)}
-                            >
-                              {sz === 'S' ? 'Small (Subtle)' : sz === 'M' ? 'Medium (Standard)' : 'Large (Bold)'}
-                            </button>
+                    {/* Artisan Feasibility & Workshop Craft Compatibility Card */}
+                    <div className={`feasibility-box ${feasibilityWarnings.length > 0 ? 'advisory' : 'pass'}`}>
+                      <div className="feasibility-header">
+                        <span>
+                          {feasibilityWarnings.length > 0
+                            ? '⚠ Artisan Feasibility Advisories'
+                            : '✓ Artisan Feasibility & Craft Compatibility'}
+                        </span>
+                        <span>{feasibilityWarnings.length > 0 ? `${feasibilityWarnings.length} Alert(s)` : 'Bench Ready'}</span>
+                      </div>
+                      {feasibilityWarnings.length > 0 ? (
+                        <ul className="feasibility-list">
+                          {feasibilityWarnings.map((w, idx) => (
+                            <li key={idx}>
+                              <b>{w.attribute}:</b> {w.message}
+                            </li>
                           ))}
-                        </div>
-                      </label>
+                        </ul>
+                      ) : (
+                        <p className="feasibility-pass-note">
+                          All selected customizations (leather temper {leather.temper}, {product.name} silhouette, {monoCapacity.label}, and {configuration.hardware} hardware) are artisan-verified and ready for bench cutting.
+                        </p>
+                      )}
                     </div>
 
                     <label className="custom-request-field">
@@ -1969,6 +2093,15 @@ export function App() {
           setActiveTab('leather')
           setNotice('Selected leather updated in 3D Studio.')
         }}
+      />
+
+      {/* Real-Time Price History & Rate Transparency Modal */}
+      <PriceHistoryModal
+        isOpen={priceHistoryOpen}
+        onClose={() => setPriceHistoryOpen(false)}
+        activeLeatherId={configuration.leatherId}
+        activeLeatherName={leather.name}
+        currentRate={customLeatherRates[configuration.leatherId] ?? leather.ratePerSqFt}
       />
 
       {/* Notification Toast */}

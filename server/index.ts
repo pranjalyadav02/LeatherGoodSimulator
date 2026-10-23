@@ -16,6 +16,7 @@ const QUOTES_FILE = path.join(DATA_DIR, 'quotes.json')
 const INVENTORY_FILE = path.join(DATA_DIR, 'inventory.json')
 const MARKET_FILE = path.join(DATA_DIR, 'market.json')
 const DESIGNS_FILE = path.join(DATA_DIR, 'designs.json')
+const PRICE_HISTORY_FILE = path.join(DATA_DIR, 'price_history.json')
 
 // Helper for file reading/writing with fallbacks
 function readJsonFile<T>(filePath: string, fallback: T): T {
@@ -269,11 +270,63 @@ const INITIAL_INVENTORY = [
   },
 ]
 
+const INITIAL_PRICE_HISTORY = [
+  {
+    id: 'ph-001',
+    itemId: 'heritage-calf',
+    itemName: 'Heritage Full-Grain Calf',
+    category: 'Leather Hides',
+    oldPrice: 240,
+    newPrice: 260,
+    changePercentage: 8.33,
+    changedBy: 'Master Craftsman Rajesh K.',
+    reason: 'Q1 Alpine tanners raw hide cost normalization',
+    createdAt: '2026-01-15T10:30:00.000Z',
+  },
+  {
+    id: 'ph-002',
+    itemId: 'saddle-hide',
+    itemName: 'Saddle Hide (Heavy Veg-Tan)',
+    category: 'Leather Hides',
+    oldPrice: 260,
+    newPrice: 280,
+    changePercentage: 7.69,
+    changedBy: 'Master Craftsman Rajesh K.',
+    reason: 'Tree-bark vegetable extract tariff adjustment',
+    createdAt: '2026-02-01T14:15:00.000Z',
+  },
+  {
+    id: 'ph-003',
+    itemId: 'pebble-grain',
+    itemName: 'Pebble Grain Calf',
+    category: 'Leather Hides',
+    oldPrice: 225,
+    newPrice: 210,
+    changePercentage: -6.67,
+    changedBy: 'Master Craftsman Rajesh K.',
+    reason: 'Bulk procurement rebate from Ranipet Tannery',
+    createdAt: '2026-02-20T09:45:00.000Z',
+  },
+  {
+    id: 'ph-004',
+    itemId: 'saffiano',
+    itemName: 'Saffiano Cross-Grain',
+    category: 'Leather Hides',
+    oldPrice: 220,
+    newPrice: 235,
+    changePercentage: 6.82,
+    changedBy: 'Master Craftsman Rajesh K.',
+    reason: 'Import air freight surcharge update',
+    createdAt: '2026-03-05T11:20:00.000Z',
+  },
+]
+
 // Initialize files if not existing
 readJsonFile(QUOTES_FILE, INITIAL_QUOTES)
 readJsonFile(INVENTORY_FILE, INITIAL_INVENTORY)
 readJsonFile(MARKET_FILE, { observations: [] })
 readJsonFile(DESIGNS_FILE, {})
+readJsonFile(PRICE_HISTORY_FILE, INITIAL_PRICE_HISTORY)
 
 const app = express()
 app.use(cors())
@@ -359,6 +412,28 @@ app.patch('/api/inventory/:id', (req, res) => {
   inventory[index] = { ...inventory[index], ...updates }
   writeJsonFile(INVENTORY_FILE, inventory)
   res.json({ success: true, item: inventory[index] })
+})
+
+// --- PRICE HISTORY API ---
+app.get('/api/price-history', (_req, res) => {
+  const history = readJsonFile(PRICE_HISTORY_FILE, INITIAL_PRICE_HISTORY)
+  res.json({ history, count: history.length })
+})
+
+app.post('/api/price-history', (req, res) => {
+  const record = req.body
+  if (!record || !record.itemId || record.newPrice == null) {
+    return res.status(400).json({ error: 'Missing price history record fields' })
+  }
+  const history = readJsonFile(PRICE_HISTORY_FILE, INITIAL_PRICE_HISTORY)
+  const newEntry = {
+    ...record,
+    id: record.id || `ph-${Date.now().toString(36)}`,
+    createdAt: record.createdAt || new Date().toISOString(),
+  }
+  const updated = [newEntry, ...history]
+  writeJsonFile(PRICE_HISTORY_FILE, updated)
+  res.status(201).json({ success: true, record: newEntry })
 })
 
 // --- DESIGNS API ---

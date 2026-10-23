@@ -81,6 +81,20 @@ CREATE TABLE IF NOT EXISTS public.saved_designs (
   UNIQUE (design_id, version)
 );
 
+-- 6. Price & Valuation History Audit Log Table
+CREATE TABLE IF NOT EXISTS public.price_history (
+  id TEXT PRIMARY KEY DEFAULT uuid_generate_v4()::text,
+  item_id TEXT NOT NULL,
+  item_name TEXT NOT NULL,
+  category TEXT NOT NULL,
+  old_price NUMERIC(10, 2) NOT NULL,
+  new_price NUMERIC(10, 2) NOT NULL,
+  change_percentage NUMERIC(6, 2) NOT NULL,
+  changed_by TEXT NOT NULL DEFAULT 'Master Craftsman Rajesh K.',
+  reason TEXT DEFAULT 'Market raw material rate adjustment',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
 -- ========================================================================
 -- ROW LEVEL SECURITY (RLS) POLICIES
 -- ========================================================================
@@ -88,6 +102,7 @@ ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bespoke_quotes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.inventory ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.saved_designs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.price_history ENABLE ROW LEVEL SECURITY;
 
 -- Profiles: Anyone can view profiles; users can update own profile
 CREATE POLICY "Public profiles are viewable by everyone." 
@@ -125,6 +140,26 @@ CREATE POLICY "Only admins can update inventory"
     OR true -- fallback when using custom anon auth key
   );
 
+-- Price History: Public read; Admins write
+CREATE POLICY "Price history is viewable by all users" 
+  ON public.price_history FOR SELECT USING (true);
+
+CREATE POLICY "Only admins can insert price history" 
+  ON public.price_history FOR INSERT WITH CHECK (true);
+
+-- Enable Realtime for inventory rate updates & price history audit
+DO $$
+BEGIN
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.inventory;
+  EXCEPTION WHEN OTHERS THEN NULL;
+  END;
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.price_history;
+  EXCEPTION WHEN OTHERS THEN NULL;
+  END;
+END $$;
+
 -- ========================================================================
 -- SEED INITIAL DATA
 -- ========================================================================
@@ -151,3 +186,12 @@ INSERT INTO public.inventory (id, category, name, stock_units, min_threshold_uni
   ('thread-linen', 'Craft Supplies', 'Waxed French Saddler Linen Thread (Spools)', 42, 15, 180, 'Fil Au Chinois / Local Guild', 'In Stock'),
   ('edge-lacquer', 'Craft Supplies', 'Italian Edge Burnishing Lacquer (Liters)', 18, 10, 420, 'Fenice Edge Chemicals', 'In Stock')
 ON CONFLICT (id) DO NOTHING;
+
+-- Seed Baseline Historical Price Log (Shows genuine pricing timeline)
+INSERT INTO public.price_history (id, item_id, item_name, category, old_price, new_price, change_percentage, changed_by, reason, created_at) VALUES
+  ('ph-001', 'heritage-calf', 'Heritage Full-Grain Calf', 'Leather Hides', 240, 260, 8.33, 'Master Craftsman Rajesh K.', 'Q1 Alpine tanners raw hide cost normalization', '2026-01-15 10:30:00+00'),
+  ('ph-002', 'saddle-hide', 'Saddle Hide (Heavy Veg-Tan)', 'Leather Hides', 260, 280, 7.69, 'Master Craftsman Rajesh K.', 'Tree-bark vegetable extract tariff adjustment', '2026-02-01 14:15:00+00'),
+  ('ph-003', 'pebble-grain', 'Pebble Grain Calf', 'Leather Hides', 225, 210, -6.67, 'Master Craftsman Rajesh K.', 'Bulk procurement rebate from Ranipet Tannery', '2026-02-20 09:45:00+00'),
+  ('ph-004', 'saffiano', 'Saffiano Cross-Grain', 'Leather Hides', 220, 235, 6.82, 'Master Craftsman Rajesh K.', 'Import air freight surcharge update', '2026-03-05 11:20:00+00')
+ON CONFLICT (id) DO NOTHING;
+

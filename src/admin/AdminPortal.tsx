@@ -6,9 +6,12 @@ import {
   updateQuoteStatus,
   updateInventory,
   fetchHealth,
+  fetchPriceHistory,
   type QuoteRecord,
   type InventoryItem,
+  type PriceHistoryRecord,
 } from '../api'
+import { isSupabaseConfigured } from '../supabase'
 
 interface AdminPortalProps {
   onBackToStudio: () => void
@@ -30,16 +33,20 @@ export function AdminPortal({ onBackToStudio }: AdminPortalProps) {
   const [stockEditItem, setStockEditItem] = useState<InventoryItem | null>(null)
   const [newStockValue, setNewStockValue] = useState<number>(0)
   const [newRateValue, setNewRateValue] = useState<number>(0)
+  const [rateChangeReason, setRateChangeReason] = useState<string>('')
+  const [priceHistory, setPriceHistory] = useState<PriceHistoryRecord[]>([])
 
   const loadData = async () => {
-    const [qData, iData, hData] = await Promise.all([
+    const [qData, iData, hData, phData] = await Promise.all([
       fetchQuotes(),
       fetchInventory(),
       fetchHealth(),
+      fetchPriceHistory(),
     ])
     setQuotes(qData)
     setInventory(iData)
     setServerHealth(hData)
+    setPriceHistory(phData)
   }
 
   useEffect(() => {
@@ -72,11 +79,22 @@ export function AdminPortal({ onBackToStudio }: AdminPortalProps) {
 
   const handleSaveInventory = async () => {
     if (!stockEditItem) return
-    const success = await updateInventory(stockEditItem.id, {
-      stockSqFt: newStockValue,
-      ratePerSqFt: newRateValue,
-      status: newStockValue < (stockEditItem.minThresholdSqFt ?? 100) ? 'Low Stock' : 'In Stock',
-    })
+    const oldPrice = stockEditItem.ratePerSqFt
+    const success = await updateInventory(
+      stockEditItem.id,
+      {
+        stockSqFt: newStockValue,
+        ratePerSqFt: newRateValue,
+        name: stockEditItem.name,
+        status: newStockValue < (stockEditItem.minThresholdSqFt ?? 100) ? 'Low Stock' : 'In Stock',
+      },
+      {
+        oldPrice,
+        itemName: stockEditItem.name,
+        reason: rateChangeReason.trim() || 'Atelier operations procurement hide rate adjustment',
+        changedBy: 'Master Craftsman Rajesh K.',
+      },
+    )
 
     if (success) {
       setInventory((prev) =>
@@ -91,8 +109,11 @@ export function AdminPortal({ onBackToStudio }: AdminPortalProps) {
             : item,
         ),
       )
-      showToast(`Updated stock & rate for ${stockEditItem.name}`)
+      const updatedHistory = await fetchPriceHistory()
+      setPriceHistory(updatedHistory)
+      showToast(`Updated stock & rate for ${stockEditItem.name} (broadcasted live)`)
       setStockEditItem(null)
+      setRateChangeReason('')
     }
   }
 
@@ -120,10 +141,9 @@ export function AdminPortal({ onBackToStudio }: AdminPortalProps) {
       {/* Top Operations Header */}
       <header className="admin-header">
         <div className="admin-brand-block">
-          <span className="admin-badge">OPERATIONS HUB</span>
           <div className="admin-title-wrap">
-            <h1>Atelier N°07 Operations &amp; Admin Portal</h1>
-            <small>Carry Leather Goods · Workshop Bench Management</small>
+            <h1>Leather Good Simulation Engine — Admin Portal</h1>
+            <small>Atelier Operations Hub · Real-time Valuation &amp; Production Control</small>
           </div>
         </div>
 
@@ -158,6 +178,21 @@ export function AdminPortal({ onBackToStudio }: AdminPortalProps) {
           <span className="server-status-pill">
             <span className="pulse-dot" />
             {serverHealth ? `API Server Active (Port 3001)` : `Local Offline Mode`}
+          </span>
+
+          <span
+            className="server-status-pill"
+            style={{
+              background: isSupabaseConfigured ? '#f0fdf4' : '#fffbeb',
+              borderColor: isSupabaseConfigured ? '#bbf7d0' : '#fde68a',
+              color: isSupabaseConfigured ? '#15803d' : '#b45309',
+            }}
+          >
+            <span
+              className="pulse-dot"
+              style={{ background: isSupabaseConfigured ? '#22c55e' : '#f59e0b' }}
+            />
+            {isSupabaseConfigured ? '⚡ Supabase Cloud Live' : '⚡ Supabase Ready'}
           </span>
 
           <button className="exit-admin-btn" onClick={onBackToStudio} title="Return to Customer 3D Studio">
@@ -450,6 +485,74 @@ export function AdminPortal({ onBackToStudio }: AdminPortalProps) {
                 </tbody>
               </table>
             </div>
+
+            {/* Price & Valuation History Audit Table */}
+            <div style={{ marginTop: '28px' }}>
+              <div className="admin-toolbar" style={{ marginBottom: '14px' }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '16px', color: 'var(--admin-gold)' }}>
+                    📈 Real-Time Price History &amp; Procurement Audit Trail
+                  </h3>
+                  <small style={{ color: 'var(--admin-muted)' }}>
+                    Chronological ledger of raw material rate adjustments synchronized across Supabase and active studios
+                  </small>
+                </div>
+              </div>
+
+              <div className="admin-table-card">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Material / Hide</th>
+                      <th>Previous Rate</th>
+                      <th>New Rate</th>
+                      <th>Shift %</th>
+                      <th>Authorized By</th>
+                      <th>Adjustment Rationale</th>
+                      <th>Logged Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {priceHistory.map((ph) => {
+                      const isUp = ph.newPrice > ph.oldPrice
+                      return (
+                        <tr key={ph.id}>
+                          <td><b>{ph.itemName}</b></td>
+                          <td style={{ color: 'var(--admin-muted)', textDecoration: 'line-through' }}>
+                            ₹{ph.oldPrice}/sq.ft
+                          </td>
+                          <td>
+                            <strong style={{ color: 'var(--admin-ink)' }}>₹{ph.newPrice}/sq.ft</strong>
+                          </td>
+                          <td>
+                            <span
+                              style={{
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                background: isUp ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                                color: isUp ? '#f87171' : '#34d399',
+                              }}
+                            >
+                              {isUp ? '▲ +' : '▼ '}
+                              {ph.changePercentage}%
+                            </span>
+                          </td>
+                          <td>{ph.changedBy}</td>
+                          <td style={{ fontSize: '12px', color: 'var(--admin-muted)' }}>
+                            &ldquo;{ph.reason}&rdquo;
+                          </td>
+                          <td style={{ fontSize: '11px', color: 'var(--admin-muted)' }}>
+                            {new Date(ph.createdAt).toLocaleDateString(undefined, { dateStyle: 'medium' })}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         )}
 
@@ -703,6 +806,25 @@ export function AdminPortal({ onBackToStudio }: AdminPortalProps) {
                   type="number"
                   value={newRateValue}
                   onChange={(e) => setNewRateValue(Number(e.target.value))}
+                />
+                {stockEditItem && newRateValue !== stockEditItem.ratePerSqFt && (
+                  <small style={{ color: 'var(--admin-gold)', fontWeight: 600, display: 'block', marginTop: '4px' }}>
+                    Shift: {newRateValue > (stockEditItem.ratePerSqFt || 0) ? '▲ +' : '▼ '}
+                    {(
+                      (((newRateValue - (stockEditItem.ratePerSqFt || 1)) / (stockEditItem.ratePerSqFt || 1)) * 100)
+                    ).toFixed(2)}
+                    % from ₹{stockEditItem.ratePerSqFt}
+                  </small>
+                )}
+              </div>
+
+              <div className="admin-form-group">
+                <label>Reason for Price Adjustment:</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Tannery raw hide cost revision"
+                  value={rateChangeReason}
+                  onChange={(e) => setRateChangeReason(e.target.value)}
                 />
               </div>
 

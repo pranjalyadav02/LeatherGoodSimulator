@@ -15,7 +15,58 @@ import type {
   Recommendation,
   StudioCostBreakdown,
   ValidationIssue,
+  MonogramSize,
 } from './types'
+
+export interface MonogramCapacityResult {
+  maxChars: number
+  fontSizePx: number
+  scaleFactor: number
+  label: string
+  warning: string
+}
+
+export function getMaxMonogramCapacity(
+  size: MonogramSize = 'M',
+  productId?: string,
+): MonogramCapacityResult {
+  const isCompact = productId === 'cardholder' || productId === 'sunglass' || productId === 'wallet'
+
+  if (size === 'L') {
+    const maxChars = isCompact ? 2 : 3
+    return {
+      maxChars,
+      fontSizePx: 28,
+      scaleFactor: 1.3,
+      label: 'Large (28pt / Bold Display)',
+      warning: isCompact
+        ? 'Large 28pt brass type is limited to 2 characters on compact leather silhouettes to avoid edge seam distortion.'
+        : 'Large 28pt brass type is limited to 3 characters on full-sized panels.',
+    }
+  }
+
+  if (size === 'S') {
+    const maxChars = isCompact ? 4 : 6
+    return {
+      maxChars,
+      fontSizePx: 16,
+      scaleFactor: 0.75,
+      label: 'Small (16pt / Petite Discreet)',
+      warning: isCompact
+        ? 'Small 16pt type fits up to 4 characters within the precision stamping margin.'
+        : 'Small 16pt type fits up to 6 characters across spacious panel leather.',
+    }
+  }
+
+  // Medium default (22pt / Classic Benchmark)
+  return {
+    maxChars: 3,
+    fontSizePx: 22,
+    scaleFactor: 1.0,
+    label: 'Medium (22pt / Classic Benchmark)',
+    warning: 'Standard 22pt typeface accommodates up to 3 bespoke monogram characters.',
+  }
+}
 
 export function validateConfiguration(config: Configuration): ValidationIssue[] {
   const product = productById(config.productId)
@@ -58,12 +109,51 @@ export function validateConfiguration(config: Configuration): ValidationIssue[] 
       severity: 'error',
     })
   }
-  if (config.monogram.length > 3) {
+
+  const monoCapacity = getMaxMonogramCapacity(config.monogramSize ?? 'M', config.productId)
+  if (config.monogram.length > monoCapacity.maxChars) {
     issues.push({
       code: 'MONOGRAM_LENGTH',
-      message: 'Monograms are limited to three characters in this sample model.',
+      message: `Initials "${config.monogram}" (${config.monogram.length} chars) exceed the maximum of ${monoCapacity.maxChars} character(s) allowed for Font Size ${config.monogramSize ?? 'M'} on the ${product.name}. ${monoCapacity.warning}`,
       attribute: 'monogram',
       severity: 'error',
+    })
+  }
+
+  // Structural feasibility checks
+  if (leather.id === 'saddle-hide' && (product.id === 'cardholder' || product.id === 'sunglass')) {
+    issues.push({
+      code: 'FEASIBILITY_RIGID_LEATHER',
+      message: `${leather.name} (2.8 mm) requires high-tolerance bench skiving for compact folding seams. Workshop craft review required.`,
+      attribute: 'leatherId',
+      severity: 'warning',
+    })
+  }
+
+  if (leather.id === 'nappa' && product.id === 'tote' && !config.paddedLining) {
+    issues.push({
+      code: 'FEASIBILITY_SUPPLE_STRUCTURE',
+      message: `${leather.name} is ultra-supple (1.4 mm); consider adding padded lining or reinforcement for optimal tote shape retention.`,
+      attribute: 'paddedLining',
+      severity: 'warning',
+    })
+  }
+
+  if (leather.id === 'saffiano' && config.monogramMethod === 'blind_deboss') {
+    issues.push({
+      code: 'FEASIBILITY_DEBOSS_LEGIBILITY',
+      message: 'Saffiano cross-hatch pressed wax requires hot metallic foil or raised emboss; blind heat deboss has reduced legibility.',
+      attribute: 'monogramMethod',
+      severity: 'warning',
+    })
+  }
+
+  if (config.heightCm > config.widthCm * 1.75) {
+    issues.push({
+      code: 'FEASIBILITY_ASPECT_RATIO',
+      message: `Height (${config.heightCm} cm) exceeds 1.75× width. Workshop warns of base balance stability during carry.`,
+      attribute: 'heightCm',
+      severity: 'warning',
     })
   }
   if (!Number.isInteger(config.pocketCount) || config.pocketCount < 0 || config.pocketCount > 5) {

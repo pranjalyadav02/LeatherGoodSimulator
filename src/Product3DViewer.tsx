@@ -492,12 +492,15 @@ export function Product3DViewer({
     if (text.length > 0 && app.decalMesh) {
       app.decalMesh.visible = true
       const fontChoice = config.monogramFont ?? 'serif'
+      const scaleMul = config.monogramSize === 'L' ? 1.35 : config.monogramSize === 'S' ? 0.72 : 1.0
+      const basePx = fontChoice === 'script' ? 240 : fontChoice === 'sans' ? 210 : 230
+      const fontSizePx = Math.round(basePx * scaleMul)
       const fontString =
         fontChoice === 'script'
-          ? 'italic 600 240px "Pinyon Script", "Brush Script MT", cursive'
+          ? `italic 600 ${fontSizePx}px "Pinyon Script", "Brush Script MT", cursive`
           : fontChoice === 'sans'
-            ? '800 210px "Instrument Sans", "Manrope", system-ui, sans-serif'
-            : '600 230px "Newsreader", "Georgia", serif'
+            ? `800 ${fontSizePx}px "Instrument Sans", "Manrope", system-ui, sans-serif`
+            : `600 ${fontSizePx}px "Newsreader", "Georgia", serif`
 
       ctx.font = fontString
       ctx.textAlign = 'center'
@@ -551,6 +554,7 @@ export function Product3DViewer({
     config.monogram,
     config.monogramMethod,
     config.monogramFont,
+    config.monogramSize,
     config.edgeColorId,
   ])
 

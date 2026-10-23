@@ -157,3 +157,167 @@ export async function getInventoryFromSupabase(): Promise<InventoryItem[] | null
     return null
   }
 }
+
+export interface PriceHistoryRecord {
+  id: string
+  itemId: string
+  itemName: string
+  category: string
+  oldPrice: number
+  newPrice: number
+  changePercentage: number
+  changedBy: string
+  reason?: string
+  createdAt: string
+}
+
+/**
+ * Fetch price history from Supabase
+ */
+export async function getPriceHistoryFromSupabase(): Promise<PriceHistoryRecord[] | null> {
+  if (!supabase) return null
+
+  try {
+    const { data, error } = await supabase
+      .from('price_history')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (error || !data) return null
+
+    return data.map((row) => ({
+      id: row.id,
+      itemId: row.item_id,
+      itemName: row.item_name,
+      category: row.category,
+      oldPrice: Number(row.old_price),
+      newPrice: Number(row.new_price),
+      changePercentage: Number(row.change_percentage),
+      changedBy: row.changed_by,
+      reason: row.reason,
+      createdAt: row.created_at,
+    }))
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Record a price adjustment into Supabase
+ */
+export async function recordPriceHistoryInSupabase(
+  record: Omit<PriceHistoryRecord, 'id' | 'createdAt'>,
+): Promise<boolean> {
+  if (!supabase) return false
+
+  try {
+    const { error } = await supabase.from('price_history').insert([
+      {
+        id: `ph-${Date.now().toString(36)}`,
+        item_id: record.itemId,
+        item_name: record.itemName,
+        category: record.category,
+        old_price: record.oldPrice,
+        new_price: record.newPrice,
+        change_percentage: record.changePercentage,
+        changed_by: record.changedBy,
+        reason: record.reason || 'Artisan hide rate adjustment',
+      },
+    ])
+    return !error
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Update inventory item in Supabase
+ */
+export async function updateInventoryInSupabase(
+  id: string,
+  updates: Partial<InventoryItem>,
+): Promise<boolean> {
+  if (!supabase) return false
+
+  try {
+    const dbUpdates: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    }
+    if (updates.ratePerSqFt !== undefined) dbUpdates.rate_per_sq_ft = updates.ratePerSqFt
+    if (updates.stockSqFt !== undefined) dbUpdates.stock_sq_ft = updates.stockSqFt
+    if (updates.costPerUnit !== undefined) dbUpdates.cost_per_unit = updates.costPerUnit
+    if (updates.stockUnits !== undefined) dbUpdates.stock_units = updates.stockUnits
+    if (updates.status !== undefined) dbUpdates.status = updates.status
+
+    const { error } = await supabase.from('inventory').update(dbUpdates).eq('id', id)
+    return !error
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Subscribe to real-time price & inventory updates from Supabase
+ */
+export function subscribeToRealtimePriceUpdates(
+  onRateChange: (itemId: string, newRate: number, itemName: string) => void,
+  onHistoryAdded?: (record: PriceHistoryRecord) => void,
+): (() => void) | null {
+  if (!supabase) return null
+
+  try {
+    const channel = supabase
+      .channel('atelier-realtime-prices')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'inventory' },
+        (payload) => {
+          const row = payload.new as { id?: string; rate_per_sq_ft?: number; name?: string }
+          if (row?.id && row?.rate_per_sq_ft != null) {
+            onRateChange(row.id, Number(row.rate_per_sq_ft), row.name || row.id)
+          }
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'price_history' },
+        (payload) => {
+          const row = payload.new as {
+            id: string
+            item_id: string
+            item_name: string
+            category: string
+            old_price: number
+            new_price: number
+            change_percentage: number
+            changed_by: string
+            reason?: string
+            created_at: string
+          }
+          if (row?.id && onHistoryAdded) {
+            onHistoryAdded({
+              id: row.id,
+              itemId: row.item_id,
+              itemName: row.item_name,
+              category: row.category,
+              oldPrice: Number(row.old_price),
+              newPrice: Number(row.new_price),
+              changePercentage: Number(row.change_percentage),
+              changedBy: row.changed_by,
+              reason: row.reason,
+              createdAt: row.created_at,
+            })
+          }
+        },
+      )
+      .subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  } catch (err) {
+    console.warn('[Supabase Realtime] Could not subscribe:', err)
+    return null
+  }
+}
+
